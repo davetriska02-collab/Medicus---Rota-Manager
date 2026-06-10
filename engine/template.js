@@ -4,19 +4,21 @@
 // manual edits and prior generations win.
 
 import { datesInRange, dayKey, templateWeekIndex } from '../shared/time.js';
-import { typeById } from '../shared/model.js';
+import { typeById, canSupervise } from '../shared/model.js';
 import { approvedLeaveFor } from './leave.js';
 import { uid } from '../shared/store.js';
 
 export function generateEntries({ staff, startDate, endDate, existingEntries, leaveList, settings }) {
   const existing = new Set(existingEntries.map((e) => `${e.staffId}|${e.date}|${e.period}`));
   const anchor = settings.templateAnchorMonday || startDate;
+  const bankHolidays = settings.bankHolidays || [];
   const created = [];
 
   for (const person of staff) {
     const pattern = person.pattern || [];
     if (!pattern.length) continue;
     for (const date of datesInRange(startDate, endDate)) {
+      if (bankHolidays.includes(date)) continue; // practice closed
       const week = pattern[templateWeekIndex(anchor, date, pattern.length)];
       const day = week && week[dayKey(date)];
       if (!day) continue;
@@ -40,5 +42,23 @@ export function generateEntries({ staff, startDate, endDate, existingEntries, le
       }
     }
   }
+
+  // Registrar debriefs are real rostered time: when this run created both a
+  // registrar clinical session and an eligible supervisor's session in the
+  // same slot, note the debrief on the supervisor's session.
+  const supervisorsById = Object.fromEntries(staff.filter(canSupervise).map((s) => [s.id, s]));
+  const registrarsById = Object.fromEntries(staff.filter((s) => s.employmentType === 'registrar').map((s) => [s.id, s]));
+  for (const reg of created) {
+    const regPerson = registrarsById[reg.staffId];
+    const t = typeById(reg.typeId);
+    if (!regPerson || !t || !t.clinical || reg.status === 'vacancy') continue;
+    const sup = created.find(
+      (e) => supervisorsById[e.staffId] && e.date === reg.date && e.period === reg.period && e.status !== 'vacancy'
+    );
+    if (sup && !sup.note.includes('Debrief')) {
+      sup.note = sup.note ? `${sup.note}; Debrief — ${regPerson.name}` : `Debrief — ${regPerson.name}`;
+    }
+  }
+
   return created;
 }

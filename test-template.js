@@ -40,6 +40,28 @@ assert.equal(monAm.status, 'vacancy');
 assert.ok(!created.some((e) => e.date === '2026-06-08' && e.period === 'pm')); // admin skipped on leave
 assert.equal(created.find((e) => e.date === '2026-06-09').status, 'planned');
 
+// Bank holidays generate nothing.
+created = generateEntries({
+  staff: [gp], startDate: '2026-06-08', endDate: '2026-06-14',
+  existingEntries: [], leaveList: [],
+  settings: { ...settings, bankHolidays: ['2026-06-08'] }
+});
+assert.ok(!created.some((e) => e.date === '2026-06-08'));
+assert.ok(created.some((e) => e.date === '2026-06-09')); // rest of week unaffected
+
+// Registrar debrief is noted on the supervisor's co-generated session.
+const sup = newStaff({ id: 's1', name: 'Dr Super', employmentType: 'partner', supervisor: true, pattern: blankPattern(1) });
+sup.pattern[0].mon = { am: 'surgery', pm: null };
+const reg = newStaff({ id: 'r1', name: 'Dr Reg', employmentType: 'registrar', registrarStage: 'ST2', pattern: blankPattern(1) });
+reg.pattern[0].mon = { am: 'surgery', pm: null };
+created = generateEntries({
+  staff: [sup, reg], startDate: '2026-06-08', endDate: '2026-06-08',
+  existingEntries: [], leaveList: [], settings
+});
+const supEntry = created.find((e) => e.staffId === 's1');
+assert.ok(supEntry.note.includes('Debrief — Dr Reg'));
+assert.equal(created.find((e) => e.staffId === 'r1').note, '');
+
 // 2-week pattern places week-1 sessions in the second week.
 const nurse = newStaff({ id: 'n1', name: 'Nurse B', role: 'nurse', pattern: blankPattern(2) });
 nurse.pattern[1].wed = { am: 'surgery', pm: null };

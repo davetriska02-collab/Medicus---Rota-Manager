@@ -74,6 +74,8 @@ export function newStaff(seed = {}) {
     entitlement: { annual: 36, study: 6 }, // sessions per leave year (6w × 6 sessions ≈ BMA model, pro-rata in UI)
     pattern: blankPattern(1),
     medicusName: '', // exact name as it appears in the Medicus appointment book
+    site: '', // optional, one of settings.sites
+    vtsDay: '', // registrars: immovable VTS half-day, e.g. 'tue-pm'
     colour: PALETTE[Math.floor(Math.random() * PALETTE.length)],
     ...seed
   };
@@ -115,5 +117,19 @@ export const DEFAULT_SETTINGS = {
   apptsPerSurgerySession: 15, // ~3h patient-facing per 4h10m session (BMA safe working)
   accessBenchmarkPer1000: 72, // appointments per 1,000 patients per week
   bradfordThresholds: { monitor: 50, high: 200, severe: 500 },
+  // Registrars count as reduced capacity: longer appointments, 70/30 split.
+  registrarWeights: { early: 0.5, st3: 0.75 },
+  sites: [], // optional: multi-site practices get per-site duty checks
+  // England & Wales bank holidays (editable in Settings).
+  bankHolidays: [
+    '2026-01-01', '2026-04-03', '2026-04-06', '2026-05-04', '2026-05-25', '2026-08-31', '2026-12-25', '2026-12-28',
+    '2027-01-01', '2027-03-26', '2027-03-29', '2027-05-03', '2027-05-31', '2027-08-30', '2027-12-27', '2027-12-28'
+  ],
+  // Seasonal leave caps (local policy): max counted-leave sessions per
+  // person within each named period.
+  peakPeriods: [], // [{ name, start, end, maxSessions }]
+  userName: '',
+  userStaffId: null,
+  userRole: 'manager', // 'manager' | 'staff'
   templateAnchorMonday: null
 };

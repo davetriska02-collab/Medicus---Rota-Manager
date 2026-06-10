@@ -53,6 +53,30 @@ res = checkLeaveRequest(
 );
 assert.ok(res.warnings.some((w) => /duty doctor/.test(w.message)));
 
+// Bank holidays cost no leave sessions (pattern fallback).
+const bhSettings = { ...settings, bankHolidays: ['2026-06-08'] };
+assert.equal(sessionsInRange(gp, '2026-06-08', '2026-06-12', [], bhSettings), 1); // Mon (2) skipped, Tue AM remains
+
+// Peak-period cap: existing approved leave + this request exceeds the cap.
+const peakSettings = {
+  ...settings,
+  peakPeriods: [{ name: 'Summer', start: '2026-06-01', end: '2026-06-30', maxSessions: 3 }]
+};
+const peakLeave = [
+  { id: 'pk1', staffId: 'gp1', type: 'annual', status: 'approved', startDate: '2026-06-01', endDate: '2026-06-02', sessions: 3 } // Mon+Tue = 3 pattern sessions
+];
+res = checkLeaveRequest(
+  { id: 'pk2', staffId: 'gp1', type: 'annual', startDate: '2026-06-08', endDate: '2026-06-09' },
+  { staff: [gp], leaveList: peakLeave, entries: [], settings: peakSettings }
+);
+assert.ok(res.warnings.some((w) => /Summer/.test(w.message) && /cap is 3/.test(w.message)));
+// Sickness (uncounted) is exempt from peak caps.
+res = checkLeaveRequest(
+  { id: 'pk3', staffId: 'gp1', type: 'sick', startDate: '2026-06-08', endDate: '2026-06-09' },
+  { staff: [gp], leaveList: peakLeave, entries: [], settings: peakSettings }
+);
+assert.ok(!res.warnings.some((w) => /Summer/.test(w.message)));
+
 // Approval punches out: clinical -> vacancy, admin removed.
 const applied = applyApprovedLeave({ staffId: 'gp1', type: 'annual', startDate: '2026-06-08', endDate: '2026-06-09' }, entries);
 assert.equal(applied.vacancies, 2);

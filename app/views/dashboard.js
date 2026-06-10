@@ -8,9 +8,9 @@ import { checkWeek, capacitySummary } from '../../engine/rules.js';
 import { approvedLeaveFor, sfeReimbursementFlags, fitNoteFlags, sessionsInRange, applyApprovedLeave } from '../../engine/leave.js';
 import { bradfordRows } from '../../engine/bradford.js';
 import { rankCover, applyCover } from '../../engine/cover.js';
+import { validateSwap, applySwap } from '../../engine/swaps.js';
 import { uid } from '../../shared/store.js';
-import { staffSorted } from './ui.js';
-import { warnHTML } from './ui.js';
+import { staffSorted, warnHTML } from './ui.js';
 
 export default {
   render(root, ctx) {
@@ -24,6 +24,7 @@ export default {
     const cap = capacitySummary({ dates, entries: state.entries, staff: state.staff, leaveList: state.leave, settings: state.settings });
     const vacancies = state.entries.filter((e) => e.status === 'vacancy' && e.date >= today);
     const pending = state.leave.filter((l) => l.status === 'requested');
+    const pendingSwaps = (state.swaps || []).filter((s) => s.status === 'requested');
     const sfe = sfeReimbursementFlags(state.leave, state.staff);
     const fitFlags = fitNoteFlags(state.leave, state.staff);
     const bradfordFlagged = bradfordRows({ staff: state.staff, leaveList: state.leave, settings: state.settings })
@@ -64,6 +65,32 @@ export default {
         ${warnHTML(warnings.slice(0, 10))}
         ${warnings.length > 10 ? `<div class="sub" style="margin-top:6px">…and ${warnings.length - 10} more on the Rota page.</div>` : ''}
       </div>
+
+      ${pendingSwaps.length ? `
+        <div class="card">
+          <h2 class="mt0">Swap requests (${pendingSwaps.length})</h2>
+          ${pendingSwaps.map((s) => {
+            const a = state.entries.find((e) => e.id === s.entryAId);
+            const b = state.entries.find((e) => e.id === s.entryBId);
+            if (!a || !b) return '';
+            const pa = state.staff.find((p) => p.id === a.staffId);
+            const pb = state.staff.find((p) => p.id === b.staffId);
+            const ta = typeById(a.typeId);
+            const tb = typeById(b.typeId);
+            const errors = validateSwap({ entryA: a, entryB: b, staff: state.staff, leaveList: state.leave });
+            return `
+              <div style="border-bottom:1px solid var(--line);padding:8px 0">
+                <div class="toolbar" style="margin-bottom:4px">
+                  <span><strong>${esc(pa ? pa.name : '?')}</strong> ${esc(fmtDay(a.date))} ${a.period.toUpperCase()} (${esc(ta ? ta.name : a.typeId)})
+                    ⇄ <strong>${esc(pb ? pb.name : '?')}</strong> ${esc(fmtDay(b.date))} ${b.period.toUpperCase()} (${esc(tb ? tb.name : b.typeId)})</span>
+                  <span class="spacer"></span>
+                  <button class="small primary" data-swapok="${esc(s.id)}">Approve</button>
+                  <button class="small danger" data-swapno="${esc(s.id)}">Decline</button>
+                </div>
+                ${errors.length ? warnHTML(errors.map((m) => ({ severity: 'medium', message: m }))) : ''}
+              </div>`;
+          }).join('')}
+        </div>` : ''}
 
       ${state.staff.length ? `
         <div class="card">
@@ -126,9 +153,36 @@ export default {
       const applied = applyApprovedLeave(req, state.entries);
       state.entries = applied.entries;
       await ctx.persist('leave', 'entries');
+      await ctx.log(`${person.name} marked sick today — ${applied.vacancies} session(s) to cover`);
       ctx.toast(`${person.name} marked sick — ${applied.vacancies} session(s) need cover`);
       ctx.rerender();
     };
+
+    root.querySelectorAll('[data-swapok]').forEach((btn) => {
+      btn.onclick = async () => {
+        const s = state.swaps.find((x) => x.id === btn.dataset.swapok);
+        if (!s) return;
+        const result = applySwap(s, state.entries);
+        if (!result.ok) { ctx.toast('One of the sessions no longer exists'); return; }
+        state.entries = result.entries;
+        s.status = 'approved';
+        s.decidedAt = new Date().toISOString();
+        await ctx.persist('entries', 'swaps');
+        await ctx.log(`Swap approved (${s.id})`);
+        ctx.toast('Swap approved — sessions exchanged');
+        ctx.rerender();
+      };
+    });
+    root.querySelectorAll('[data-swapno]').forEach((btn) => {
+      btn.onclick = async () => {
+        const s = state.swaps.find((x) => x.id === btn.dataset.swapno);
+        if (!s) return;
+        s.status = 'declined';
+        s.decidedAt = new Date().toISOString();
+        await ctx.persist('swaps');
+        ctx.rerender();
+      };
+    });
 
     root.querySelectorAll('[data-assign]').forEach((btn) => {
       btn.onclick = async () => {

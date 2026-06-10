@@ -22,8 +22,10 @@ function anyLeaveOn(leaveList, staffId, dateISO, statuses) {
 // Rostered entries are the truth where they exist; otherwise fall back to
 // the working pattern.
 export function sessionsInRange(staffMember, startISO, endISO, entries, settings) {
+  const bankHolidays = settings.bankHolidays || [];
   let count = 0;
   for (const date of datesInRange(startISO, endISO)) {
+    if (bankHolidays.includes(date)) continue; // closed days cost nothing
     for (const period of ['am', 'pm']) {
       const entry = entries.find(
         (e) => e.staffId === staffMember.id && e.date === date && e.period === period && e.status !== 'cancelled'
@@ -92,6 +94,32 @@ export function checkLeaveRequest(req, { staff, leaveList, entries, settings }) 
           message: `${date}: already ${others.length} ${group} staff on approved leave (${names.join(', ')}) — cap is ${cap}`
         });
         break; // one clash message per request is enough to flag it
+      }
+    }
+  }
+
+  // Seasonal caps (local policy): total counted leave within a configured
+  // peak period (school holidays, Christmas, summer) per person.
+  if (lt && lt.counted) {
+    for (const peak of settings.peakPeriods || []) {
+      if (req.endDate < peak.start || req.startDate > peak.end) continue;
+      const overlapStart = req.startDate > peak.start ? req.startDate : peak.start;
+      const overlapEnd = req.endDate < peak.end ? req.endDate : peak.end;
+      const thisCost = sessionsInRange(person, overlapStart, overlapEnd, entries, settings);
+      const already = leaveList
+        .filter((l) => l.id !== req.id && l.staffId === person.id && l.status === 'approved' &&
+          leaveTypeById(l.type) && leaveTypeById(l.type).counted &&
+          l.startDate <= peak.end && l.endDate >= peak.start)
+        .reduce((sum, l) => {
+          const s = l.startDate > peak.start ? l.startDate : peak.start;
+          const e = l.endDate < peak.end ? l.endDate : peak.end;
+          return sum + sessionsInRange(person, s, e, entries, settings);
+        }, 0);
+      if (already + thisCost > peak.maxSessions) {
+        warnings.push({
+          severity: 'medium',
+          message: `${person.name}: ${already + thisCost} leave sessions in "${peak.name}" (${peak.start} – ${peak.end}) — local cap is ${peak.maxSessions}`
+        });
       }
     }
   }

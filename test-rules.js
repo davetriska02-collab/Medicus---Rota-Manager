@@ -78,6 +78,54 @@ w = checkWeek({
 });
 assert.equal(w.filter((x) => x.kind === 'room').length, 0);
 
+// Bank holidays: no duty requirement on a closed day.
+const bhSettings = { ...settings, bankHolidays: ['2026-06-08'] };
+w = checkWeek({ dates, entries: [], staff: [partner], leaveList: [], settings: bhSettings });
+assert.equal(w.filter((x) => x.kind === 'duty').length, 0);
+
+// Multi-site: duty needed at each site separately.
+const siteSettings = { ...settings, sites: ['Main', 'Branch'] };
+const partnerB = newStaff({ id: 'p2', name: 'Dr Branch', employmentType: 'partner', site: 'Branch' });
+partner.site = 'Main';
+w = checkWeek({
+  dates, staff: [partner, partnerB], leaveList: [], settings: siteSettings,
+  entries: [e('p1', '2026-06-08', 'am', 'duty'), e('p2', '2026-06-08', 'am', 'surgery'),
+            e('p1', '2026-06-08', 'pm', 'duty'), e('p2', '2026-06-08', 'pm', 'duty')]
+});
+const siteDuty = w.filter((x) => x.kind === 'duty');
+assert.equal(siteDuty.length, 1); // Branch AM uncovered
+assert.ok(/Branch/.test(siteDuty[0].message));
+partner.site = '';
+
+// Enhanced access without a GP on it -> warning; with a GP -> none.
+const anp = newStaff({ id: 'a1', name: 'ANP Ann', role: 'anp', dutyEligible: false });
+w = checkWeek({
+  dates, staff: [anp, partner], leaveList: [], settings,
+  entries: [e('a1', '2026-06-08', 'am', 'enhanced'), e('p1', '2026-06-08', 'am', 'duty'), e('p1', '2026-06-08', 'pm', 'duty')]
+});
+assert.equal(w.filter((x) => x.kind === 'enhanced').length, 1);
+w = checkWeek({
+  dates, staff: [anp, partner], leaveList: [], settings,
+  entries: [e('a1', '2026-06-08', 'am', 'enhanced'), e('p1', '2026-06-08', 'am', 'enhanced'), e('p1', '2026-06-08', 'pm', 'duty')]
+});
+assert.equal(w.filter((x) => x.kind === 'enhanced').length, 0);
+
+// Registrar rostered clinically on their immovable VTS half-day.
+const regVts = newStaff({ id: 'rv', name: 'Dr Vts', employmentType: 'registrar', registrarStage: 'ST2', dutyEligible: false, vtsDay: 'mon-am' });
+w = checkWeek({
+  dates, staff: [regVts, partner], leaveList: [], settings,
+  entries: [e('rv', '2026-06-08', 'am', 'surgery'), e('p1', '2026-06-08', 'am', 'duty'), e('p1', '2026-06-08', 'pm', 'duty')]
+});
+assert.equal(w.filter((x) => x.kind === 'vts').length, 1);
+
+// Registrar capacity weighting: ST2 counts 0.5, ST3 0.75.
+const capReg = capacitySummary({
+  dates, staff: [partner, regVts], leaveList: [], settings,
+  entries: [e('p1', '2026-06-08', 'am', 'surgery'), e('rv', '2026-06-08', 'am', 'surgery')]
+});
+assert.equal(capReg.gpClinicalSessions, 1.5);
+assert.equal(capReg.estimated, 23); // 1.5 × 15, rounded
+
 // Capacity: 1 GP clinical session × 15 appts vs 2,000-patient list target 144.
 const cap = capacitySummary({ dates, entries: [e('p1', '2026-06-08', 'am', 'surgery')], staff: [partner], leaveList: [], settings });
 assert.equal(cap.gpClinicalSessions, 1);

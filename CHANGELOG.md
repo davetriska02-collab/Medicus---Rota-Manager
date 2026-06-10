@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.4.0 — 2026-06-10
+
+The market-leading push: inference, shared state, self-service, evidence, domain round-out.
+
+- **Auto-template inference** (`engine/infer.js`): reads 4 weeks of Medicus appointment-book
+  history and proposes each clinician's week pattern (cell proposed at ≥60% weekday presence),
+  one-click apply per person from the Templates page. Sample-data mode included.
+- **Practice sync** (`shared/sync.js`): multi-user shared state over a folder on the practice's
+  shared drive (File System Access API) — versioned JSON, debounced push on every change,
+  15-second pull, last-writer-wins, reconnect flow. No server; data never leaves the practice.
+- **Identity & audit trail**: who-am-I (name + manager/staff role) in Settings; every material
+  action (edits, approvals, covers, swaps, reports) recorded in a capped, synced audit log.
+- **My week self-service** (new view): each clinician sees their upcoming sessions, balances,
+  exports their ICS, submits leave requests and proposes **shift swaps** (role-group and leave
+  validated); managers approve swaps from the Dashboard and the sessions exchange people.
+- **CQC evidence pack** (`engine/evidence.js`): printable report of the safe-staffing rules in
+  force plus a weekly compliance record (duty cover %, supervision/HCA/room breaches,
+  capacity vs benchmark), leave totals, Bradford table and the change log. Settings → Reports.
+- **Domain round-out**: England & Wales bank holidays (closed: no duty checks, no generation,
+  no leave cost; editable list); seasonal peak-period leave caps; per-site duty cover for
+  multi-site practices with a site filter on the grid; enhanced-access "GP physically present"
+  check; registrar VTS half-day protection; registrar-weighted capacity (ST1/2 ×0.5, ST3 ×0.75);
+  debrief time auto-noted on the supervisor's generated session.
+
 ## 1.3.0 — 2026-06-10
 
 Everything from the deferred list, plus the cover assistant.

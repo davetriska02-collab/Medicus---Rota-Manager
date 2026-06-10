@@ -6,6 +6,8 @@ import { DAY_KEYS, DEFAULT_SETTINGS } from '../../shared/model.js';
 import { isValidPracticeCode } from '../../shared/medicus-api.js';
 import { exportEnvelope, importEnvelope, wipe, save, uid } from '../../shared/store.js';
 import { demoData } from '../../shared/demo.js';
+import { mondayOf, todayISO, addDays } from '../../shared/time.js';
+import { buildEvidenceReport } from '../../engine/evidence.js';
 import { download } from './ui.js';
 
 export default {
@@ -13,8 +15,36 @@ export default {
     const { state } = ctx;
     const s = state.settings;
 
+    const syncStatus = state.ui.syncStatus || 'off';
     root.innerHTML = `
       <h1>Settings</h1>
+      <div class="card">
+        <h2 class="mt0">You &amp; practice sync</h2>
+        <div class="formgrid">
+          <label class="field">Your name (audit trail)
+            <input id="s-username" value="${esc(s.userName || '')}" placeholder="e.g. Jo Bloggs (PM)">
+          </label>
+          <label class="field">Your role on this machine
+            <select id="s-userrole">
+              <option value="manager" ${s.userRole !== 'staff' ? 'selected' : ''}>Manager (full access)</option>
+              <option value="staff" ${s.userRole === 'staff' ? 'selected' : ''}>Staff (My week focused)</option>
+            </select>
+          </label>
+        </div>
+        <div class="toolbar" style="margin-top:6px">
+          ${syncStatus === 'unsupported'
+            ? '<span class="sub">Shared-folder sync is not supported by this browser.</span>'
+            : syncStatus === 'connected'
+              ? `<span class="pill approved">sync connected</span><span class="sub">v${ctx.sync.status().version} — changes share via the folder, polled every 15s</span>
+                 <span class="spacer"></span><button id="s-syncoff" class="danger">Disconnect</button>`
+              : syncStatus === 'needs-permission'
+                ? `<span class="pill requested">reconnect needed</span>
+                   <button id="s-syncperm" class="primary">Re-allow folder access</button>`
+                : `<button id="s-syncon" class="primary">Connect shared folder…</button>
+                   <span class="sub">Pick a folder on the practice's shared drive — every machine pointed at the same folder shares one live rota. Data never leaves the practice.</span>`}
+        </div>
+      </div>
+
       <div class="card">
         <h2 class="mt0">Practice</h2>
         <div class="formgrid">
@@ -31,6 +61,17 @@ export default {
         <div style="margin-top:6px">
           <strong>Open days:</strong>
           ${DAY_KEYS.map((d) => `<label class="check"><input type="checkbox" class="s-day" value="${d}" ${s.openDays.includes(d) ? 'checked' : ''}>${d.toUpperCase()}</label>`).join('')}
+        </div>
+        <div class="formgrid" style="margin-top:10px">
+          <label class="field">Sites (one per line — leave empty for single-site)
+            <textarea id="s-sites" rows="3" style="display:block;margin-top:4px;min-width:220px">${esc((s.sites || []).join('\n'))}</textarea>
+          </label>
+          <label class="field">Bank holidays (YYYY-MM-DD, one per line)
+            <textarea id="s-bh" rows="3" style="display:block;margin-top:4px;min-width:220px">${esc((s.bankHolidays || []).join('\n'))}</textarea>
+          </label>
+          <label class="field">Peak leave periods (name,start,end,maxSessions per line)
+            <textarea id="s-peaks" rows="3" style="display:block;margin-top:4px;min-width:220px" placeholder="Summer,2026-07-20,2026-09-01,12">${esc((s.peakPeriods || []).map((p) => `${p.name},${p.start},${p.end},${p.maxSessions}`).join('\n'))}</textarea>
+          </label>
         </div>
       </div>
 
@@ -66,6 +107,26 @@ export default {
       </div>
 
       <div class="card">
+        <h2 class="mt0">Reports</h2>
+        <div class="toolbar">
+          <select id="s-evweeks">${[4, 8, 12, 26].map((n) => `<option value="${n}" ${n === 12 ? 'selected' : ''}>Last ${n} weeks</option>`).join('')}</select>
+          <button id="s-evidence" class="primary">Generate CQC evidence pack</button>
+          <span class="sub">Safe-staffing rules in force + the weekly compliance record — opens printable, save as PDF.</span>
+        </div>
+      </div>
+
+      ${(state.audit || []).length ? `
+      <div class="card">
+        <h2 class="mt0">Audit log <span class="sub" style="font-weight:400">(last ${Math.min(state.audit.length, 25)} of ${state.audit.length})</span></h2>
+        <table>
+          <thead><tr><th>When</th><th>Who</th><th>Action</th></tr></thead>
+          <tbody>${state.audit.slice(-25).reverse().map((a) => `
+            <tr><td class="sub">${esc(new Date(a.at).toLocaleString('en-GB'))}</td><td>${esc(a.by || '—')}</td><td>${esc(a.summary)}</td></tr>`).join('')}
+          </tbody>
+        </table>
+      </div>` : ''}
+
+      <div class="card">
         <h2 class="mt0">Data</h2>
         <div class="toolbar">
           <button id="s-export">Export backup</button>
@@ -83,6 +144,15 @@ export default {
       const code = root.querySelector('#s-code').value.trim().toLowerCase();
       if (code && !isValidPracticeCode(code)) { ctx.toast('Practice code must be 4–8 hex characters'); return; }
       s.practiceCode = code;
+      s.userName = root.querySelector('#s-username').value.trim();
+      s.userRole = root.querySelector('#s-userrole').value;
+      s.sites = root.querySelector('#s-sites').value.split('\n').map((x) => x.trim()).filter(Boolean);
+      s.bankHolidays = root.querySelector('#s-bh').value.split('\n').map((x) => x.trim()).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)).sort();
+      s.peakPeriods = root.querySelector('#s-peaks').value.split('\n').map((line) => {
+        const [name, start, end, max] = line.split(',').map((x) => x.trim());
+        if (!name || !/^\d{4}-\d{2}-\d{2}$/.test(start || '') || !/^\d{4}-\d{2}-\d{2}$/.test(end || '')) return null;
+        return { name, start, end, maxSessions: Number(max) || 0 };
+      }).filter(Boolean);
       s.listSize = Number(root.querySelector('#s-list').value) || 0;
       s.templateAnchorMonday = root.querySelector('#s-anchor').value || null;
       s.openDays = [...root.querySelectorAll('.s-day:checked')].map((c) => c.value);
@@ -106,6 +176,47 @@ export default {
       await ctx.persist('settings');
       ctx.toast('Settings saved');
       ctx.rerender();
+    };
+
+    const syncOn = root.querySelector('#s-syncon');
+    if (syncOn) syncOn.onclick = async () => {
+      try {
+        await ctx.sync.connect();
+        await ctx.syncConnected();
+        ctx.toast('Shared folder connected — this machine now syncs');
+      } catch (err) {
+        if (err && err.name !== 'AbortError') ctx.toast(`Could not connect: ${err.message || err}`);
+      }
+    };
+    const syncPerm = root.querySelector('#s-syncperm');
+    if (syncPerm) syncPerm.onclick = async () => {
+      if (await ctx.sync.requestPermission()) {
+        await ctx.syncConnected();
+        ctx.toast('Folder access restored');
+      } else ctx.toast('Permission was not granted');
+    };
+    const syncOff = root.querySelector('#s-syncoff');
+    if (syncOff) syncOff.onclick = async () => {
+      await ctx.sync.disconnect();
+      state.ui.syncStatus = 'off';
+      state.ui.syncReady = false;
+      ctx.toast('Sync disconnected — this machine is standalone again');
+      ctx.rerender();
+    };
+
+    root.querySelector('#s-evidence').onclick = async () => {
+      const weeks = Number(root.querySelector('#s-evweeks').value);
+      const startMonday = addDays(mondayOf(todayISO()), -7 * (weeks - 1));
+      const html = buildEvidenceReport({
+        startMonday, weeks,
+        staff: state.staff, entries: state.entries, leave: state.leave,
+        rooms: state.rooms || [], settings: s, audit: state.audit || [],
+        generatedBy: s.userName
+      });
+      const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+      window.open(url, '_blank');
+      await ctx.log(`Generated CQC evidence pack (${weeks} weeks)`);
+      ctx.toast('Evidence pack opened — use the browser print dialog to save as PDF');
     };
 
     root.querySelector('#s-addroom').onclick = async () => {
@@ -149,6 +260,8 @@ export default {
       await save('entries', demo.entries);
       await save('leave', demo.leave);
       await save('rooms', demo.rooms);
+      await save('swaps', []);
+      await save('audit', []);
       await save('settings', demo.settings);
       await ctx.reload();
       ctx.toast('Demo practice loaded — try “Generate from templates” on the Rota page');

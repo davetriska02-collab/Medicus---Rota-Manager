@@ -26,19 +26,48 @@ export function checkWeek({ dates, entries, staff, leaveList, settings, rooms = 
   const warnings = [];
   const weekEntries = entries.filter((e) => dates.includes(e.date));
 
+  const bankHolidays = settings.bankHolidays || [];
+  const sites = (settings.sites || []).filter(Boolean);
+
   for (const date of dates) {
     if (!settings.openDays.includes(dayKey(date))) continue;
+    if (bankHolidays.includes(date)) continue; // closed — no cover required
     for (const period of ['am', 'pm']) {
       const present = rosteredOn(weekEntries, staff, leaveList, date, period);
 
-      // 1. Duty cover
+      // 1. Duty cover — per site when the practice runs more than one.
       const required = (settings.dutyRequired || {})[period] ?? 1;
-      const duty = present.filter((x) => x.entry.typeId === 'duty' && x.person.dutyEligible);
-      if (duty.length < required) {
+      const siteGroups = sites.length > 1 ? sites : [null];
+      for (const site of siteGroups) {
+        const pool = site ? present.filter((x) => (x.person.site || sites[0]) === site) : present;
+        const duty = pool.filter((x) => x.entry.typeId === 'duty' && x.person.dutyEligible);
+        if (duty.length < required) {
+          warnings.push({
+            severity: 'high', kind: 'duty', date, period,
+            message: `${fmtDay(date)} ${period.toUpperCase()}${site ? ` (${site})` : ''}: no duty doctor rostered (${duty.length}/${required})`
+          });
+        }
+      }
+
+      // Enhanced access sessions need a GP physically present.
+      const enhanced = present.filter((x) => x.entry.typeId === 'enhanced');
+      if (enhanced.length && !enhanced.some((x) => x.person.role === 'gp')) {
         warnings.push({
-          severity: 'high', kind: 'duty', date, period,
-          message: `${fmtDay(date)} ${period.toUpperCase()}: no duty doctor rostered (${duty.length}/${required})`
+          severity: 'medium', kind: 'enhanced', date, period,
+          message: `${fmtDay(date)} ${period.toUpperCase()}: enhanced access running with no GP rostered on it — a GP must be physically present throughout the EA period`
         });
+      }
+
+      // Registrar VTS half-day is immovable: no clinical session on it.
+      for (const { person, entry } of present) {
+        if (person.employmentType !== 'registrar' || !person.vtsDay) continue;
+        const t = typeById(entry.typeId);
+        if (t && t.clinical && person.vtsDay === `${dayKey(date)}-${period}`) {
+          warnings.push({
+            severity: 'medium', kind: 'vts', date, period, staffId: person.id,
+            message: `${fmtDay(date)} ${period.toUpperCase()}: ${person.name} is rostered clinically on their VTS half-day (${person.vtsDay.toUpperCase()}) — that teaching time is immovable`
+          });
+        }
       }
 
       // 2. Registrar supervision
@@ -112,15 +141,23 @@ export function checkWeek({ dates, entries, staff, leaveList, settings, rooms = 
 }
 
 export function capacitySummary({ dates, entries, staff, leaveList, settings }) {
+  // Registrar sessions are weighted down: longer appointments and the
+  // 70/30 clinical/educational split mean they are not a full GP session.
+  const weights = settings.registrarWeights || { early: 0.5, st3: 0.75 };
   let gpClinicalSessions = 0;
   for (const e of entries.filter((x) => dates.includes(x.date) && ACTIVE(x))) {
     const person = staff.find((s) => s.id === e.staffId);
     const t = typeById(e.typeId);
     if (!person || !t || !t.clinical || person.role !== 'gp') continue;
     if (approvedLeaveFor(leaveList, person.id, e.date)) continue;
-    gpClinicalSessions += 1;
+    if (person.employmentType === 'registrar') {
+      gpClinicalSessions += person.registrarStage === 'ST3' ? weights.st3 : weights.early;
+    } else {
+      gpClinicalSessions += 1;
+    }
   }
-  const estimated = gpClinicalSessions * (settings.apptsPerSurgerySession || 15);
+  gpClinicalSessions = Math.round(gpClinicalSessions * 100) / 100;
+  const estimated = Math.round(gpClinicalSessions * (settings.apptsPerSurgerySession || 15));
   const target = Math.round(((settings.listSize || 0) / 1000) * (settings.accessBenchmarkPer1000 || 72));
   return { gpClinicalSessions, estimated, target };
 }

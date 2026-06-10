@@ -152,7 +152,9 @@ export default {
     const showDates = dates.filter(
       (d) => s.openDays.includes(dayKey(d)) || state.entries.some((e) => e.date === d)
     );
-    const people = staffSorted(state.staff);
+    const sites = (s.sites || []).filter(Boolean);
+    const siteFilter = state.ui.siteFilter || '';
+    const people = staffSorted(state.staff).filter((p) => !siteFilter || (p.site || sites[0]) === siteFilter);
 
     const warnings = checkWeek({ dates, entries: state.entries, staff: state.staff, leaveList: state.leave, settings: s, rooms });
     const cap = capacitySummary({ dates, entries: state.entries, staff: state.staff, leaveList: state.leave, settings: s });
@@ -177,6 +179,11 @@ export default {
         <span class="weeklabel">${esc(fmtDay(dates[0]))} – ${esc(fmtDay(dates[6]))}</span>
         <button id="modestaff" class="${mode === 'staff' ? 'primary' : ''}">Staff</button>
         <button id="moderooms" class="${mode === 'rooms' ? 'primary' : ''}" ${rooms.length ? '' : 'disabled title="Add rooms in Settings first"'}>Rooms</button>
+        ${sites.length > 1 ? `
+          <select id="sitefilter" title="Filter by site">
+            <option value="">All sites</option>
+            ${sites.map((x) => `<option ${siteFilter === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}
+          </select>` : ''}
         <span class="spacer"></span>
         <button id="undobtn" ${undoStack.length ? '' : 'disabled'} title="Ctrl+Z">↶ Undo</button>
         <button id="copyweek" title="Copy last week's sessions into empty cells this week">Copy previous week</button>
@@ -225,6 +232,8 @@ export default {
     };
     root.querySelector('#modestaff').onclick = () => { state.ui.rotaMode = 'staff'; ctx.rerender(); };
     root.querySelector('#moderooms').onclick = () => { state.ui.rotaMode = 'rooms'; ctx.rerender(); };
+    const siteSel = root.querySelector('#sitefilter');
+    if (siteSel) siteSel.onchange = () => { state.ui.siteFilter = siteSel.value; ctx.rerender(); };
     root.querySelector('#printbtn').onclick = () => window.print();
     root.querySelector('#undobtn').onclick = () => undo(ctx);
 
@@ -446,12 +455,13 @@ export default {
 /* ---- staff × day grid ---- */
 function staffGrid(state, people, showDates, dates, today, selected) {
   const s = state.settings;
+  const bh = s.bankHolidays || [];
   return `
     <table class="rota">
       <thead>
         <tr>
           <th rowspan="2">Staff</th>
-          ${showDates.map((d) => `<th colspan="2" class="day${d === today ? ' today' : ''}">${esc(fmtDay(d))}</th>`).join('')}
+          ${showDates.map((d) => `<th colspan="2" class="day${d === today ? ' today' : ''}">${esc(fmtDay(d))}${bh.includes(d) ? ' <span class="pill requested">BH</span>' : ''}</th>`).join('')}
           <th rowspan="2" title="Sessions rostered this week / contracted per week">Σ</th>
         </tr>
         <tr>${showDates.map((d) => `<th class="${d === today ? 'today' : ''}">AM</th><th class="${d === today ? 'today' : ''}">PM</th>`).join('')}</tr>

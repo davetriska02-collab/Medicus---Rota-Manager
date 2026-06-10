@@ -1,23 +1,30 @@
 // App shell: hash router + shared state. Views render into #main and
 // persist through ctx.persist; everything re-renders from state.
+// When practice sync is connected, local changes push to the shared
+// folder (debounced) and remote changes are pulled on a poll.
 
 import { loadAll, save } from '../shared/store.js';
 import { mondayOf, todayISO } from '../shared/time.js';
+import * as sync from '../shared/sync.js';
 import dashboard from './views/dashboard.js';
+import me from './views/me.js';
 import rota from './views/rota.js';
 import staff from './views/staff.js';
 import templates from './views/templates.js';
 import leave from './views/leave.js';
-import sync from './views/sync.js';
+import syncView from './views/sync.js';
 import settings from './views/settings.js';
 
-const VIEWS = { dashboard, rota, staff, templates, leave, sync, settings };
+const VIEWS = { dashboard, me, rota, staff, templates, leave, sync: syncView, settings };
+const SYNC_SCOPES = ['staff', 'entries', 'leave', 'rooms', 'swaps', 'audit', 'settings'];
 
 const state = {
   staff: [],
   entries: [],
   leave: [],
   rooms: [],
+  swaps: [],
+  audit: [],
   settings: {},
   weekMonday: mondayOf(todayISO()),
   ui: {} // per-view scratch (selected staff member, last sync results, …)
@@ -34,6 +41,23 @@ function toast(msg) {
 
 async function persist(...parts) {
   for (const p of parts) await save(p, state[p]);
+  if (state.ui.syncReady) {
+    sync.schedulePush(async () => {
+      try {
+        const scopes = Object.fromEntries(SYNC_SCOPES.map((k) => [k, state[k]]));
+        await sync.push(scopes, state.settings.userName);
+      } catch (err) {
+        toast(`Sync push failed: ${err instanceof Error ? err.message : err}`);
+      }
+    });
+  }
+}
+
+// Audit trail: who did what. Capped, synced, included in the evidence pack.
+async function log(summary) {
+  state.audit.push({ at: new Date().toISOString(), by: state.settings.userName || '', summary });
+  if (state.audit.length > 500) state.audit = state.audit.slice(-500);
+  await persist('audit');
 }
 
 function currentRoute() {
@@ -51,11 +75,47 @@ function render() {
   VIEWS[route].render(main, ctx);
 }
 
+async function applyRemote(remote) {
+  for (const key of SYNC_SCOPES) {
+    if (key in (remote.scopes || {})) await save(key, remote.scopes[key]);
+  }
+  Object.assign(state, await loadAll());
+  render();
+  toast(`Synced from shared folder (v${remote.version}${remote.updatedBy ? `, ${remote.updatedBy}` : ''})`);
+}
+
+async function pollRemote() {
+  try {
+    const remote = await sync.pull();
+    if (remote) await applyRemote(remote);
+  } catch { /* transient share-drive hiccups: try again next poll */ }
+}
+
+async function initSync() {
+  if (!sync.isSupported()) { state.ui.syncStatus = 'unsupported'; return; }
+  const restored = await sync.restore();
+  state.ui.syncStatus = restored === true ? 'connected' : restored === 'needs-permission' ? 'needs-permission' : 'off';
+  if (restored === true) {
+    state.ui.syncReady = true;
+    await pollRemote();
+    sync.startPolling(pollRemote, 15);
+  }
+}
+
 const ctx = {
   state,
   persist,
+  log,
   rerender: render,
   toast,
+  sync,
+  async syncConnected() {
+    state.ui.syncStatus = 'connected';
+    state.ui.syncReady = true;
+    await pollRemote();
+    sync.startPolling(pollRemote, 15);
+    render();
+  },
   async reload() {
     Object.assign(state, await loadAll());
     render();
@@ -66,5 +126,6 @@ window.addEventListener('hashchange', render);
 
 (async function init() {
   Object.assign(state, await loadAll());
+  await initSync();
   render();
 })();
