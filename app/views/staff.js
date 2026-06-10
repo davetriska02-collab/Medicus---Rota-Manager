@@ -79,6 +79,7 @@ export default {
       person.medicusName = val('f-medicus').value.trim();
       person.site = val('f-site').value;
       person.vtsDay = person.employmentType === 'registrar' ? val('f-vts').value : '';
+      person.avoidDuty = [...val('f-avoidduty').selectedOptions].map((o) => o.value);
       person.colour = val('f-colour').value;
       if (editingId === 'new') {
         person.id = uid();
@@ -143,6 +144,12 @@ function form(p, isNew, sites) {
             <option value="">—</option>
             ${['mon', 'tue', 'wed', 'thu', 'fri'].flatMap((d) => ['am', 'pm'].map((pp) =>
               `<option value="${d}-${pp}" ${p.vtsDay === `${d}-${pp}` ? 'selected' : ''}>${d.toUpperCase()} ${pp.toUpperCase()}</option>`)).join('')}
+          </select>
+        </label>
+        <label class="field">Avoid duty on
+          <select id="f-avoidduty" multiple size="4">
+            ${['mon', 'tue', 'wed', 'thu', 'fri'].flatMap((d) => ['am', 'pm'].map((pp) =>
+              `<option value="${d}-${pp}" ${(p.avoidDuty || []).includes(`${d}-${pp}`) ? 'selected' : ''}>${d.toUpperCase()} ${pp.toUpperCase()}</option>`)).join('')}
           </select>
         </label>
         <label class="field">Colour<input id="f-colour" type="color" value="${esc(p.colour)}"></label>

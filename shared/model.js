@@ -76,6 +76,7 @@ export function newStaff(seed = {}) {
     medicusName: '', // exact name as it appears in the Medicus appointment book
     site: '', // optional, one of settings.sites
     vtsDay: '', // registrars: immovable VTS half-day, e.g. 'tue-pm'
+    avoidDuty: [], // 'mon-am'-style keys — solver applies preference penalty
     colour: PALETTE[Math.floor(Math.random() * PALETTE.length)],
     ...seed
   };

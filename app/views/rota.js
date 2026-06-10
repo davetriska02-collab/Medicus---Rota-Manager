@@ -10,6 +10,7 @@ import { uid } from '../../shared/store.js';
 import { checkWeek, capacitySummary, dutyFairness } from '../../engine/rules.js';
 import { generateEntries } from '../../engine/template.js';
 import { autoAssignDuty, applyDutyChanges } from '../../engine/fairness.js';
+import { solveRota } from '../../engine/solver.js';
 import { approvedLeaveFor } from '../../engine/leave.js';
 import { staffSorted, staffLabel, typeChip, leaveChip, warnHTML } from './ui.js';
 
@@ -192,6 +193,7 @@ export default {
         </select>
         <button id="generate">Generate from templates</button>
         <button id="autoduty" class="primary">Auto-assign duty</button>
+        <button id="solvebtn" class="primary">Solve rota</button>
         <button id="printbtn" title="Print this week">Print</button>
       </div>
       ${mode === 'staff' && selected.length ? `
@@ -205,6 +207,7 @@ export default {
           <button id="bulkclear" class="danger">Clear sessions</button>
           <button id="bulkdeselect">Deselect</button>
         </div>` : ''}
+      ${state.ui.solvePanel && mode === 'staff' ? solvePanel(state) : ''}
       <div class="rotawrap">
         ${mode === 'staff' ? staffGrid(state, people, showDates, dates, today, selected) : roomGrid(state, rooms, showDates, today)}
       </div>
@@ -296,6 +299,72 @@ export default {
       ctx.toast(`Duty assigned: ${changes.length} session(s)${unfilled.length ? `; ${unfilled.length} slot(s) had no eligible GP` : ''}`);
       ctx.rerender();
     };
+
+    root.querySelector('#solvebtn').onclick = () => {
+      if (state.ui.solvePanel) {
+        state.ui.solvePanel = false;
+        state.ui.solveResult = null;
+      } else {
+        state.ui.solvePanel = true;
+      }
+      ctx.rerender();
+    };
+
+    const svRun = root.querySelector('#sv-run');
+    if (svRun) {
+      svRun.onclick = async () => {
+        const weeks = Number(root.querySelector('#sv-weeks').value) || 4;
+        const maxDutyPerWeek = Number(root.querySelector('#sv-cap').value) || 2;
+        const iterations = Number(root.querySelector('#sv-effort').value) || 8000;
+        const horizonDates = [];
+        for (let w = 0; w < weeks; w++) {
+          const weekStart = addDays(state.weekMonday, w * 7);
+          for (const d of weekDates(weekStart)) horizonDates.push(d);
+        }
+        const horizonStart = horizonDates[0];
+        const historyStart = addDays(horizonStart, -56);
+        const historyEntries = state.entries.filter((e) => e.date >= historyStart && e.date < horizonStart);
+        const result = solveRota({
+          dates: horizonDates,
+          entries: state.entries,
+          staff: state.staff,
+          leaveList: state.leave,
+          settings: state.settings,
+          historyEntries,
+          options: { maxDutyPerWeek, iterations, seed: 1 }
+        });
+        state.ui.solveResult = result;
+        ctx.rerender();
+      };
+    }
+
+    const svApply = root.querySelector('#sv-apply');
+    if (svApply) {
+      svApply.onclick = async () => {
+        const result = state.ui.solveResult;
+        if (!result || !result.changes.length) return;
+        const weeks = Number(root.querySelector('#sv-weeks').value) || 4;
+        pushUndo(state);
+        for (const change of result.changes) {
+          const entry = state.entries.find((e) => e.id === change.entryId);
+          if (entry) { entry.typeId = change.to; entry.source = 'solver'; }
+        }
+        await ctx.persist('entries');
+        await ctx.log(`Solver applied ${result.changes.length} change(s) over ${weeks} week(s)`);
+        ctx.toast(`Solver applied ${result.changes.length} change(s) over ${weeks} week(s)`);
+        state.ui.solvePanel = false;
+        state.ui.solveResult = null;
+        ctx.rerender();
+      };
+    }
+
+    const svDiscard = root.querySelector('#sv-discard');
+    if (svDiscard) {
+      svDiscard.onclick = () => {
+        state.ui.solveResult = null;
+        ctx.rerender();
+      };
+    }
 
     /* ---- bulk editing ---- */
     const parseKey = (key) => {
@@ -564,5 +633,65 @@ function roomGrid(state, rooms, showDates, today) {
         `).join('')}
       </tbody>
     </table>
+  `;
+}
+
+/* ---- solve panel ---- */
+function solvePanel(state) {
+  const result = state.ui.solveResult;
+  return `
+    <div class="card" id="solvepanel">
+      <h2 class="mt0">Solve rota</h2>
+      <div class="formgrid">
+        <label class="field">Horizon (weeks)
+          <select id="sv-weeks">
+            ${[1, 2, 4, 8].map((n) => `<option value="${n}" ${n === 4 ? 'selected' : ''}>${esc(String(n))} week${n > 1 ? 's' : ''}</option>`).join('')}
+          </select>
+        </label>
+        <label class="field">Max duty / week<input id="sv-cap" type="number" min="1" max="10" value="2"></label>
+        <label class="field">Effort
+          <select id="sv-effort">
+            <option value="3000">Quick (3 000 iterations)</option>
+            <option value="8000" selected>Standard (8 000 iterations)</option>
+            <option value="20000">Thorough (20 000 iterations)</option>
+          </select>
+        </label>
+      </div>
+      <div class="toolbar" style="margin-top:8px">
+        <button id="sv-run" class="primary">Run</button>
+      </div>
+      ${result ? `
+        <div style="margin-top:12px">
+          <div class="sub" style="margin-bottom:8px">
+            Score ${esc(String(result.score.before))} → ${esc(String(result.score.after))} &middot; ${esc(String(result.changes.length))} change(s)
+          </div>
+          ${result.changes.length ? `
+            <table>
+              <thead><tr><th>Staff</th><th>Day</th><th>Period</th><th>Change</th></tr></thead>
+              <tbody>
+                ${result.changes.map((c) => {
+                  const person = state.staff.find((p) => p.id === c.staffId);
+                  return `<tr>
+                    <td>${esc(person ? person.name : c.staffId)}</td>
+                    <td>${esc(fmtDay(c.date))}</td>
+                    <td>${esc(c.period.toUpperCase())}</td>
+                    <td>${typeChip(c.from)} ⇢ ${typeChip(c.to)}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          ` : '<div class="muted">No changes — rota is already optimal.</div>'}
+          ${result.unresolved && result.unresolved.length ? `
+            <div style="margin-top:8px">
+              ${warnHTML(result.unresolved.map((u) => ({ severity: 'medium', message: u.message })))}
+            </div>
+          ` : ''}
+          <div class="toolbar" style="margin-top:8px">
+            <button id="sv-apply" class="primary" ${result.changes.length ? '' : 'disabled'}>Apply</button>
+            <button id="sv-discard">Discard</button>
+          </div>
+        </div>
+      ` : ''}
+    </div>
   `;
 }
