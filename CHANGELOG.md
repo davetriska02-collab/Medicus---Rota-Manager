@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.5.0 — 2026-06-10
+
+The auto-rota solver.
+
+- **`engine/solver.js`** (spec: docs/SOLVER-SPEC.md): optimises session-type assignment over a
+  fixed presence matrix — it never moves anyone's contractual working days. Greedy duty fill
+  seeded by pro-rata duty debt, then simulated annealing (seeded mulberry32, deterministic,
+  best-seen tracking) over four move types. Weighted scoring: duty coverage per slot/site,
+  fairness as squared deviation of duty share, registrar VTS protection, same-day double duty,
+  weekly duty caps, locum-duty cost, avoid-duty preferences, and minimal-churn. Manual,
+  confirmed, covered and vacancy entries are pinned (but still count toward coverage).
+  Supervision gaps can't be fixed by type flips, so they are reported as unresolved
+  diagnostics rather than ignored. Advisor pattern: returns a change-set, never applies itself.
+- **Solve rota panel** on the Rota page: horizon 1–8 weeks, max duty/week, quick/standard/
+  thorough effort; previews score before→after with the full change list and unresolved items;
+  Apply is undoable and audited, or Discard.
+- **Avoid-duty preferences**: per-person Mon–Fri × AM/PM multi-select in the staff editor,
+  honoured by the solver as a soft penalty.
+- 13th test suite (`test-solver.js`) covering coverage, locks, fairness splits, excess-duty
+  revert, VTS fixes, caps, preferences, bank holidays, determinism and unresolved reporting.
+
 ## 1.4.0 — 2026-06-10
 
 The market-leading push: inference, shared state, self-service, evidence, domain round-out.
