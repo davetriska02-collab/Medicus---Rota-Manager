@@ -1,0 +1,10 @@
+{
+  "name": "medicus-rota-manager",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Rota manager for general practice built around the Medicus EHR.",
+  "scripts": {
+    "test": "sh -c 'fail=0; for f in test-*.js; do node \"$f\" || fail=1; done; exit $fail'"
+  }
+}

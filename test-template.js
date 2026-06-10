@@ -1,0 +1,53 @@
+import assert from 'node:assert/strict';
+import { generateEntries } from './engine/template.js';
+import { newStaff, blankPattern, DEFAULT_SETTINGS } from './shared/model.js';
+
+const settings = { ...DEFAULT_SETTINGS, templateAnchorMonday: '2026-06-08' };
+
+const gp = newStaff({ id: 'gp1', name: 'Dr A', pattern: blankPattern(1) });
+gp.pattern[0].mon = { am: 'surgery', pm: 'admin' };
+gp.pattern[0].tue = { am: 'triage', pm: null };
+
+// One week roll-forward.
+let created = generateEntries({
+  staff: [gp], startDate: '2026-06-08', endDate: '2026-06-14',
+  existingEntries: [], leaveList: [], settings
+});
+assert.equal(created.length, 3);
+assert.deepEqual(
+  created.map((e) => `${e.date}|${e.period}|${e.typeId}|${e.status}`).sort(),
+  ['2026-06-08|am|surgery|planned', '2026-06-08|pm|admin|planned', '2026-06-09|am|triage|planned']
+);
+
+// Existing entries are never overwritten.
+created = generateEntries({
+  staff: [gp], startDate: '2026-06-08', endDate: '2026-06-14',
+  existingEntries: [{ staffId: 'gp1', date: '2026-06-08', period: 'am', typeId: 'duty', status: 'planned' }],
+  leaveList: [], settings
+});
+assert.equal(created.length, 2);
+assert.ok(!created.some((e) => e.date === '2026-06-08' && e.period === 'am'));
+
+// Approved leave: clinical sessions generate as vacancies, non-clinical skipped.
+created = generateEntries({
+  staff: [gp], startDate: '2026-06-08', endDate: '2026-06-14',
+  existingEntries: [],
+  leaveList: [{ staffId: 'gp1', status: 'approved', type: 'annual', startDate: '2026-06-08', endDate: '2026-06-08' }],
+  settings
+});
+const monAm = created.find((e) => e.date === '2026-06-08' && e.period === 'am');
+assert.equal(monAm.status, 'vacancy');
+assert.ok(!created.some((e) => e.date === '2026-06-08' && e.period === 'pm')); // admin skipped on leave
+assert.equal(created.find((e) => e.date === '2026-06-09').status, 'planned');
+
+// 2-week pattern places week-1 sessions in the second week.
+const nurse = newStaff({ id: 'n1', name: 'Nurse B', role: 'nurse', pattern: blankPattern(2) });
+nurse.pattern[1].wed = { am: 'surgery', pm: null };
+created = generateEntries({
+  staff: [nurse], startDate: '2026-06-08', endDate: '2026-06-21',
+  existingEntries: [], leaveList: [], settings
+});
+assert.equal(created.length, 1);
+assert.equal(created[0].date, '2026-06-17'); // Wednesday of week index 1
+
+console.log('test-template: OK');

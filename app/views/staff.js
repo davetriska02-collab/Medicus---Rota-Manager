@@ -1,0 +1,134 @@
+// Staff registry: the people the rota schedules, their contracts, flags
+// and — crucially — the exact name they appear under in Medicus.
+
+import { esc } from '../../shared/esc.js';
+import { ROLES, EMPLOYMENT_TYPES, newStaff, roleById } from '../../shared/model.js';
+import { uid } from '../../shared/store.js';
+import { staffSorted } from './ui.js';
+
+export default {
+  render(root, ctx) {
+    const { state } = ctx;
+    const editingId = state.ui.staffEditing;
+    const editing = editingId === 'new' ? (state.ui.staffDraft ||= newStaff()) : state.staff.find((s) => s.id === editingId);
+
+    root.innerHTML = `
+      <h1>Staff</h1>
+      <div class="toolbar">
+        <button id="add" class="primary">Add staff member</button>
+        <span class="sub">${state.staff.length} people</span>
+      </div>
+      <table>
+        <thead><tr><th>Name</th><th>Role</th><th>Employment</th><th>Sessions/wk</th><th>Flags</th><th>Medicus name</th></tr></thead>
+        <tbody>
+          ${staffSorted(state.staff).map((p) => `
+            <tr class="clickable" data-id="${esc(p.id)}">
+              <td><span class="dot" style="background:${esc(p.colour)}"></span>${esc(p.name)}</td>
+              <td>${esc((roleById(p.role) || {}).name || p.role)}</td>
+              <td>${esc((EMPLOYMENT_TYPES.find((t) => t.id === p.employmentType) || {}).name || p.employmentType)}${p.registrarStage ? ` (${esc(p.registrarStage)})` : ''}</td>
+              <td>${esc(String(p.contractedSessions))}</td>
+              <td class="sub">${[p.dutyEligible ? 'duty' : '', p.supervisor ? 'supervisor' : '', p.prescriber ? 'prescriber' : ''].filter(Boolean).join(', ')}</td>
+              <td class="sub">${esc(p.medicusName || '—')}</td>
+            </tr>
+          `).join('')}
+          ${state.staff.length ? '' : '<tr><td colspan="6" class="muted">No staff yet. Add people here, or import clinicians from the Medicus appointment book via Live sync, or load demo data from Settings.</td></tr>'}
+        </tbody>
+      </table>
+      ${editing ? form(editing, editingId === 'new') : ''}
+    `;
+
+    root.querySelector('#add').onclick = () => {
+      state.ui.staffEditing = 'new';
+      state.ui.staffDraft = newStaff();
+      ctx.rerender();
+    };
+    root.querySelectorAll('tr.clickable').forEach((tr) => {
+      tr.onclick = () => { state.ui.staffEditing = tr.dataset.id; ctx.rerender(); };
+    });
+
+    const f = root.querySelector('#staffform');
+    if (!f) return;
+    const val = (id) => f.querySelector(`#${id}`);
+
+    f.querySelector('#save').onclick = async () => {
+      const person = editing;
+      person.name = val('f-name').value.trim();
+      if (!person.name) { ctx.toast('Name is required'); return; }
+      person.role = val('f-role').value;
+      person.employmentType = val('f-emp').value;
+      person.registrarStage = person.employmentType === 'registrar' ? (val('f-stage').value || 'ST1') : null;
+      person.contractedSessions = Number(val('f-sessions').value) || 0;
+      person.dutyEligible = val('f-duty').checked;
+      person.supervisor = val('f-super').checked;
+      person.prescriber = val('f-rx').checked;
+      person.entitlement = { annual: Number(val('f-al').value) || 0, study: Number(val('f-sl').value) || 0 };
+      person.medicusName = val('f-medicus').value.trim();
+      person.colour = val('f-colour').value;
+      if (editingId === 'new') {
+        person.id = uid();
+        state.staff.push(person);
+      }
+      state.ui.staffEditing = null;
+      state.ui.staffDraft = null;
+      await ctx.persist('staff');
+      ctx.toast('Saved');
+      ctx.rerender();
+    };
+
+    f.querySelector('#cancel').onclick = () => {
+      state.ui.staffEditing = null;
+      state.ui.staffDraft = null;
+      ctx.rerender();
+    };
+
+    const del = f.querySelector('#delete');
+    if (del) del.onclick = async () => {
+      state.staff = state.staff.filter((s) => s.id !== editingId);
+      state.entries = state.entries.filter((e) => e.staffId !== editingId);
+      state.leave = state.leave.filter((l) => l.staffId !== editingId);
+      state.ui.staffEditing = null;
+      await ctx.persist('staff', 'entries', 'leave');
+      ctx.toast('Deleted (their rota entries and leave too)');
+      ctx.rerender();
+    };
+  }
+};
+
+function form(p, isNew) {
+  return `
+    <div class="card" id="staffform">
+      <h2 class="mt0">${isNew ? 'New staff member' : `Edit — ${esc(p.name)}`}</h2>
+      <div class="formgrid">
+        <label class="field">Name<input id="f-name" value="${esc(p.name)}" placeholder="Dr Jane Doe"></label>
+        <label class="field">Role
+          <select id="f-role">${ROLES.map((r) => `<option value="${r.id}" ${p.role === r.id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}</select>
+        </label>
+        <label class="field">Employment
+          <select id="f-emp">${EMPLOYMENT_TYPES.map((t) => `<option value="${t.id}" ${p.employmentType === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select>
+        </label>
+        <label class="field">Registrar stage
+          <select id="f-stage">
+            <option value="">—</option>
+            ${['ST1', 'ST2', 'ST3'].map((s) => `<option ${p.registrarStage === s ? 'selected' : ''}>${s}</option>`).join('')}
+          </select>
+        </label>
+        <label class="field">Contracted sessions / week<input id="f-sessions" type="number" min="0" max="12" value="${esc(String(p.contractedSessions))}"></label>
+        <label class="field">Annual leave (sessions/yr)<input id="f-al" type="number" min="0" value="${esc(String(p.entitlement.annual))}"></label>
+        <label class="field">Study leave (sessions/yr)<input id="f-sl" type="number" min="0" value="${esc(String(p.entitlement.study))}"></label>
+        <label class="field">Name in Medicus appointment book<input id="f-medicus" value="${esc(p.medicusName)}" placeholder="exactly as Medicus shows it"></label>
+        <label class="field">Colour<input id="f-colour" type="color" value="${esc(p.colour)}"></label>
+      </div>
+      <div style="margin:10px 0">
+        <label class="check"><input id="f-duty" type="checkbox" ${p.dutyEligible ? 'checked' : ''}>Duty-doctor eligible</label>
+        <label class="check"><input id="f-super" type="checkbox" ${p.supervisor ? 'checked' : ''}>Registrar supervisor</label>
+        <label class="check"><input id="f-rx" type="checkbox" ${p.prescriber ? 'checked' : ''}>Prescriber</label>
+      </div>
+      <div class="toolbar">
+        <button id="save" class="primary">Save</button>
+        <button id="cancel">Cancel</button>
+        <span class="spacer"></span>
+        ${isNew ? '' : '<button id="delete" class="danger">Delete</button>'}
+      </div>
+    </div>
+  `;
+}
