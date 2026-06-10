@@ -43,9 +43,9 @@ export function warnHTML(warnings) {
     .join('');
 }
 
-export function download(filename, text) {
+export function download(filename, text, mime = 'application/json') {
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  a.href = URL.createObjectURL(new Blob([text], { type: mime }));
   a.download = filename;
   a.click();
   URL.revokeObjectURL(a.href);

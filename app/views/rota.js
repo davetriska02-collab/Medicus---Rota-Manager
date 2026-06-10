@@ -1,6 +1,7 @@
 // The rota grid: staff × (day, AM/PM) for one week, with inline cell
-// editing, template generation, fair duty auto-assignment and the
-// rules-engine warnings panel underneath.
+// editing, drag-and-drop, multi-select bulk editing, keyboard navigation,
+// undo, a rooms pivot view, template generation, fair duty auto-assignment
+// and the rules-engine warnings panel underneath.
 
 import { esc } from '../../shared/esc.js';
 import { weekDates, dayKey, fmtDay, addDays, mondayOf, todayISO } from '../../shared/time.js';
@@ -12,6 +13,27 @@ import { autoAssignDuty, applyDutyChanges } from '../../engine/fairness.js';
 import { approvedLeaveFor } from '../../engine/leave.js';
 import { staffSorted, staffLabel, typeChip, leaveChip, warnHTML } from './ui.js';
 
+const ACTIVE = ['planned', 'confirmed', 'covered'];
+let activeCtx = null;
+
+/* ---- undo ---- */
+function pushUndo(state) {
+  const stack = state.ui.undoStack || (state.ui.undoStack = []);
+  stack.push(JSON.stringify(state.entries));
+  if (stack.length > 30) stack.shift();
+}
+
+async function undo(ctx) {
+  const stack = ctx.state.ui.undoStack || [];
+  const snapshot = stack.pop();
+  if (!snapshot) { ctx.toast('Nothing to undo'); return; }
+  ctx.state.entries = JSON.parse(snapshot);
+  await ctx.persist('entries');
+  ctx.toast('Undone');
+  ctx.rerender();
+}
+
+/* ---- cell editor menu ---- */
 function closeMenu() {
   const m = document.getElementById('cellmenu');
   if (m) m.remove();
@@ -31,7 +53,7 @@ function openCellMenu(ctx, cell, person, date, period) {
     `).join('')}
     ${entry && rooms.length ? `
       <div class="who">Room</div>
-      ${rooms.map((r) => `<button data-room="${esc(r.id)}"><span class="chip" style="background:${entry.roomId === r.id ? '#0d9488' : '#cbd5e1'}">RM</span>${esc(r.name)}${entry.roomId === r.id ? ' ✓' : ''}</button>`).join('')}
+      ${rooms.map((r) => `<button data-room="${esc(r.id)}"><span class="chip" style="background:${entry.roomId === r.id ? '#0d9488' : '#64748b'}">RM</span>${esc(r.name)}${entry.roomId === r.id ? ' ✓' : ''}</button>`).join('')}
       ${entry.roomId ? '<button data-room=""><span class="chip" style="background:#94a3b8">×</span>No room</button>' : ''}
     ` : ''}
     ${entry ? '<button data-act="note"><span class="chip" style="background:#64748b">…</span>Edit note</button>' : ''}
@@ -47,6 +69,7 @@ function openCellMenu(ctx, cell, person, date, period) {
     const btn = ev.target.closest('button');
     if (!btn) return;
     if (btn.dataset.type) {
+      pushUndo(state);
       if (entry) {
         entry.typeId = btn.dataset.type;
         entry.status = 'planned';
@@ -59,15 +82,19 @@ function openCellMenu(ctx, cell, person, date, period) {
         });
       }
     } else if ('room' in btn.dataset && entry) {
+      pushUndo(state);
       entry.roomId = btn.dataset.room || null;
     } else if (btn.dataset.act === 'note' && entry) {
       const note = prompt('Note for this session', entry.note || '');
-      if (note === null) return; // cancelled — keep the menu open state simple: bail without saving
+      if (note === null) return;
+      pushUndo(state);
       entry.note = note.trim();
     } else if (btn.dataset.act === 'covered' && entry) {
+      pushUndo(state);
       entry.status = 'covered';
       entry.note = 'Covered by locum';
     } else if (btn.dataset.act === 'clear' && entry) {
+      pushUndo(state);
       state.entries = state.entries.filter((e) => e.id !== entry.id);
     }
     closeMenu();
@@ -80,10 +107,46 @@ document.addEventListener('click', (ev) => {
   if (!ev.target.closest('#cellmenu') && !ev.target.closest('td.cell')) closeMenu();
 });
 
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape') closeMenu();
+  if (!activeCtx) return;
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z') {
+    if (location.hash !== '#rota') return;
+    if (ev.target.closest('input, select, textarea')) return;
+    ev.preventDefault();
+    undo(activeCtx);
+  }
+});
+
+/* ---- keyboard grid navigation ---- */
+function moveFocus(root, cell, dx, dy) {
+  const rows = [...root.querySelectorAll('table.rota tbody tr')].filter((r) => r.querySelector('td.cell'));
+  const rowIdx = rows.findIndex((r) => r.contains(cell));
+  if (rowIdx < 0) return;
+  const cells = [...rows[rowIdx].querySelectorAll('td.cell')];
+  const colIdx = cells.indexOf(cell);
+  const r = rowIdx + dy;
+  const c = colIdx + dx;
+  if (r < 0 || r >= rows.length) return;
+  const targetCells = [...rows[r].querySelectorAll('td.cell')];
+  if (c < 0 || c >= targetCells.length) return;
+  cell.tabIndex = -1;
+  targetCells[c].tabIndex = 0;
+  targetCells[c].focus();
+}
+
+const cellKey = (cell) => `${cell.dataset.staff}|${cell.dataset.date}|${cell.dataset.period}`;
+const shortName = (name) => String(name || '').split(/\s+/).map((w) => w[0]).join('').slice(0, 3).toUpperCase();
+
 export default {
   render(root, ctx) {
+    activeCtx = ctx;
     const { state } = ctx;
     const s = state.settings;
+    const mode = state.ui.rotaMode || 'staff';
+    const selected = state.ui.selected || (state.ui.selected = []);
+    const undoStack = state.ui.undoStack || [];
+    const rooms = state.rooms || [];
     const dates = weekDates(state.weekMonday);
     const today = todayISO();
     const showDates = dates.filter(
@@ -91,7 +154,7 @@ export default {
     );
     const people = staffSorted(state.staff);
 
-    const warnings = checkWeek({ dates, entries: state.entries, staff: state.staff, leaveList: state.leave, settings: s, rooms: state.rooms || [] });
+    const warnings = checkWeek({ dates, entries: state.entries, staff: state.staff, leaveList: state.leave, settings: s, rooms });
     const cap = capacitySummary({ dates, entries: state.entries, staff: state.staff, leaveList: state.leave, settings: s });
     const fairnessWindowStart = addDays(state.weekMonday, -56);
     const fair = dutyFairness({
@@ -112,7 +175,10 @@ export default {
         <button id="next">›</button>
         <input type="date" id="jump" value="${esc(state.weekMonday)}" title="Jump to week">
         <span class="weeklabel">${esc(fmtDay(dates[0]))} – ${esc(fmtDay(dates[6]))}</span>
+        <button id="modestaff" class="${mode === 'staff' ? 'primary' : ''}">Staff</button>
+        <button id="moderooms" class="${mode === 'rooms' ? 'primary' : ''}" ${rooms.length ? '' : 'disabled title="Add rooms in Settings first"'}>Rooms</button>
         <span class="spacer"></span>
+        <button id="undobtn" ${undoStack.length ? '' : 'disabled'} title="Ctrl+Z">↶ Undo</button>
         <button id="copyweek" title="Copy last week's sessions into empty cells this week">Copy previous week</button>
         <select id="genweeks">
           ${[1, 2, 4, 6, 8, 12].map((n) => `<option value="${n}">${n} week${n > 1 ? 's' : ''}</option>`).join('')}
@@ -121,76 +187,25 @@ export default {
         <button id="autoduty" class="primary">Auto-assign duty</button>
         <button id="printbtn" title="Print this week">Print</button>
       </div>
+      ${mode === 'staff' && selected.length ? `
+        <div class="toolbar bulkbar">
+          <strong>${selected.length} cell(s) selected</strong>
+          <select id="bulktype">${SESSION_TYPES.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select>
+          <button id="bulktypeapply">Set type</button>
+          ${rooms.length ? `
+            <select id="bulkroom"><option value="">No room</option>${rooms.map((r) => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('')}</select>
+            <button id="bulkroomapply">Set room</button>` : ''}
+          <button id="bulkclear" class="danger">Clear sessions</button>
+          <button id="bulkdeselect">Deselect</button>
+        </div>` : ''}
       <div class="rotawrap">
-        <table class="rota">
-          <thead>
-            <tr>
-              <th rowspan="2">Staff</th>
-              ${showDates.map((d) => `<th colspan="2" class="day${d === today ? ' today' : ''}">${esc(fmtDay(d))}</th>`).join('')}
-              <th rowspan="2" title="Sessions rostered this week / contracted per week">Σ</th>
-            </tr>
-            <tr>${showDates.map((d) => `<th class="${d === today ? 'today' : ''}">AM</th><th class="${d === today ? 'today' : ''}">PM</th>`).join('')}</tr>
-          </thead>
-          <tbody>
-            ${people.map((p) => {
-              const rostered = state.entries.filter(
-                (e) => e.staffId === p.id && dates.includes(e.date) &&
-                  (e.status === 'planned' || e.status === 'confirmed' || e.status === 'covered')
-              ).length;
-              const over = p.contractedSessions > 0 && rostered > p.contractedSessions;
-              return `
-              <tr>
-                <td class="staffname">${staffLabel(p)}</td>
-                ${showDates.map((d) => {
-                  const onLeave = approvedLeaveFor(state.leave, p.id, d);
-                  return ['am', 'pm'].map((period) => {
-                    const entry = state.entries.find((e) => e.staffId === p.id && e.date === d && e.period === period);
-                    const room = entry && entry.roomId ? (state.rooms || []).find((r) => r.id === entry.roomId) : null;
-                    const extra = entry ? [room && room.name, entry.note].filter(Boolean).join(' — ') : '';
-                    let inner;
-                    if (entry && entry.status === 'vacancy') inner = typeChip(entry.typeId, 'vacancy', extra);
-                    else if (onLeave) inner = leaveChip(onLeave);
-                    else if (entry) inner = typeChip(entry.typeId, entry.status, extra);
-                    else inner = '<span class="empty">·</span>';
-                    if (entry && !onLeave && (room || entry.note)) {
-                      inner += `<div class="roomtag">${esc(room ? room.name : '')}${entry.note ? (room ? ' ' : '') + '📝' : ''}</div>`;
-                    }
-                    return `<td class="cell${d === today ? ' today' : ''}"${entry ? ' draggable="true"' : ''} data-staff="${esc(p.id)}" data-date="${esc(d)}" data-period="${period}">${inner}</td>`;
-                  }).join('');
-                }).join('')}
-                <td class="right" title="${rostered} rostered / ${esc(String(p.contractedSessions))} contracted" style="${over ? 'color:var(--med);font-weight:700' : rostered < p.contractedSessions ? 'color:var(--muted)' : ''}">${rostered}/${esc(String(p.contractedSessions))}</td>
-              </tr>
-            `;
-            }).join('')}
-            ${people.length ? '' : `<tr><td colspan="99" class="muted">No staff yet — add your team under Staff, or load the demo dataset from Settings.</td></tr>`}
-          </tbody>
-          ${people.length ? `
-          <tfoot>
-            <tr>
-              <th>Clinical on site</th>
-              ${showDates.map((d) => ['am', 'pm'].map((period) => {
-                const present = state.entries.filter((e) => {
-                  if (e.date !== d || e.period !== period) return false;
-                  if (e.status !== 'planned' && e.status !== 'confirmed' && e.status !== 'covered') return false;
-                  const t = typeById(e.typeId);
-                  if (!t || !t.clinical) return false;
-                  const person = state.staff.find((x) => x.id === e.staffId);
-                  return person && !approvedLeaveFor(state.leave, person.id, d);
-                });
-                const duty = present.some((e) => {
-                  const person = state.staff.find((x) => x.id === e.staffId);
-                  return e.typeId === 'duty' && person && person.dutyEligible;
-                });
-                const open = s.openDays.includes(dayKey(d));
-                if (!open) return '<th class="muted">—</th>';
-                return `<th title="${present.length} clinical staff, duty ${duty ? 'covered' : 'NOT covered'}" style="color:${duty ? 'var(--ok)' : 'var(--high)'}">${present.length} ${duty ? '✓' : '✗'}</th>`;
-              }).join('')).join('')}
-              <th></th>
-            </tr>
-          </tfoot>` : ''}
-        </table>
+        ${mode === 'staff' ? staffGrid(state, people, showDates, dates, today, selected) : roomGrid(state, rooms, showDates, today)}
       </div>
-      <div class="sub" style="margin:6px 0 14px">Click a cell to edit · drag a session to move it · drop on an occupied cell to swap · hold Ctrl (or Alt) while dropping to copy.</div>
+      <div class="sub" style="margin:6px 0 14px">
+        ${mode === 'staff'
+          ? 'Click a cell to edit · Shift-click to multi-select · drag to move, drop on occupied to swap, Ctrl-drop to copy · arrows + Enter to navigate, Delete to clear, Ctrl+Z to undo.'
+          : 'Rooms view: who is in each room per session. Assign rooms from the Staff view cell menu. The Unassigned row shows clinical sessions with no room.'}
+      </div>
       <div class="card">
         <h2 class="mt0">Checks — ${high ? `<span style="color:var(--high)">${high} high-priority</span>, ` : ''}${warnings.length} total</h2>
         <div class="sub" style="margin-bottom:8px">
@@ -201,21 +216,24 @@ export default {
       </div>
     `;
 
+    /* ---- toolbar ---- */
     root.querySelector('#prev').onclick = () => { state.weekMonday = addDays(state.weekMonday, -7); ctx.rerender(); };
     root.querySelector('#next').onclick = () => { state.weekMonday = addDays(state.weekMonday, 7); ctx.rerender(); };
     root.querySelector('#todaybtn').onclick = () => { state.weekMonday = mondayOf(todayISO()); ctx.rerender(); };
     root.querySelector('#jump').onchange = (e) => {
       if (e.target.value) { state.weekMonday = mondayOf(e.target.value); ctx.rerender(); }
     };
+    root.querySelector('#modestaff').onclick = () => { state.ui.rotaMode = 'staff'; ctx.rerender(); };
+    root.querySelector('#moderooms').onclick = () => { state.ui.rotaMode = 'rooms'; ctx.rerender(); };
     root.querySelector('#printbtn').onclick = () => window.print();
+    root.querySelector('#undobtn').onclick = () => undo(ctx);
 
     root.querySelector('#copyweek').onclick = async () => {
       const prevDates = weekDates(addDays(state.weekMonday, -7));
+      pushUndo(state);
       let copied = 0;
       let skipped = 0;
-      const source = state.entries.filter(
-        (e) => prevDates.includes(e.date) && (e.status === 'planned' || e.status === 'confirmed' || e.status === 'covered')
-      );
+      const source = state.entries.filter((e) => prevDates.includes(e.date) && ACTIVE.includes(e.status));
       for (const e of source) {
         const date = addDays(e.date, 7);
         const occupied = state.entries.some((t) => t.staffId === e.staffId && t.date === date && t.period === e.period);
@@ -227,6 +245,7 @@ export default {
         copied += 1;
       }
       if (copied) await ctx.persist('entries');
+      else state.ui.undoStack.pop();
       ctx.toast(`Copied ${copied} session(s) from last week${skipped ? `; ${skipped} skipped (occupied or on leave)` : ''}`);
       ctx.rerender();
     };
@@ -245,8 +264,11 @@ export default {
         leaveList: state.leave,
         settings: state.settings
       });
-      state.entries.push(...created);
-      await ctx.persist('entries');
+      if (created.length) {
+        pushUndo(state);
+        state.entries.push(...created);
+        await ctx.persist('entries');
+      }
       ctx.toast(`Generated ${created.length} sessions over ${weeks} week(s)`);
       ctx.rerender();
     };
@@ -258,6 +280,7 @@ export default {
         leaveList: state.leave, settings: state.settings, historyEntries: history
       });
       if (changes.length) {
+        pushUndo(state);
         state.entries = applyDutyChanges(state.entries, changes);
         await ctx.persist('entries');
       }
@@ -265,10 +288,106 @@ export default {
       ctx.rerender();
     };
 
-    root.querySelectorAll('td.cell').forEach((cell) => {
-      cell.addEventListener('click', () => {
+    /* ---- bulk editing ---- */
+    const parseKey = (key) => {
+      const [staffId, date, period] = key.split('|');
+      return { staffId, date, period };
+    };
+    const bulkBtn = (id, fn) => { const b = root.querySelector(id); if (b) b.onclick = fn; };
+
+    bulkBtn('#bulktypeapply', async () => {
+      const typeId = root.querySelector('#bulktype').value;
+      pushUndo(state);
+      let changed = 0;
+      for (const key of selected) {
+        const { staffId, date, period } = parseKey(key);
+        if (approvedLeaveFor(state.leave, staffId, date)) continue;
+        const entry = state.entries.find((e) => e.staffId === staffId && e.date === date && e.period === period);
+        if (entry) {
+          Object.assign(entry, { typeId, status: 'planned', source: 'manual' });
+        } else {
+          state.entries.push({ id: uid(), staffId, date, period, typeId, status: 'planned', source: 'manual', note: '' });
+        }
+        changed += 1;
+      }
+      await ctx.persist('entries');
+      ctx.toast(`Set ${changed} session(s) to ${typeById(typeId).name}`);
+      ctx.rerender();
+    });
+
+    bulkBtn('#bulkroomapply', async () => {
+      const roomId = root.querySelector('#bulkroom').value || null;
+      pushUndo(state);
+      let changed = 0;
+      for (const key of selected) {
+        const { staffId, date, period } = parseKey(key);
+        const entry = state.entries.find((e) => e.staffId === staffId && e.date === date && e.period === period);
+        if (entry) { entry.roomId = roomId; changed += 1; }
+      }
+      await ctx.persist('entries');
+      ctx.toast(`Room updated on ${changed} session(s)`);
+      ctx.rerender();
+    });
+
+    bulkBtn('#bulkclear', async () => {
+      pushUndo(state);
+      const keys = new Set(selected);
+      const before = state.entries.length;
+      state.entries = state.entries.filter((e) => !keys.has(`${e.staffId}|${e.date}|${e.period}`));
+      state.ui.selected = [];
+      await ctx.persist('entries');
+      ctx.toast(`Cleared ${before - state.entries.length} session(s)`);
+      ctx.rerender();
+    });
+
+    bulkBtn('#bulkdeselect', () => { state.ui.selected = []; ctx.rerender(); });
+
+    /* ---- cell wiring (staff mode only) ---- */
+    if (mode !== 'staff') return;
+    const cells = [...root.querySelectorAll('td.cell')];
+    cells.forEach((cell, i) => {
+      cell.tabIndex = i === 0 ? 0 : -1;
+
+      cell.addEventListener('click', (ev) => {
         const person = state.staff.find((p) => p.id === cell.dataset.staff);
-        if (person) openCellMenu(ctx, cell, person, cell.dataset.date, cell.dataset.period);
+        if (!person) return;
+        if (ev.shiftKey) {
+          const key = cellKey(cell);
+          const idx = selected.indexOf(key);
+          if (idx >= 0) selected.splice(idx, 1); else selected.push(key);
+          ctx.rerender();
+          return;
+        }
+        openCellMenu(ctx, cell, person, cell.dataset.date, cell.dataset.period);
+      });
+
+      cell.addEventListener('keydown', async (ev) => {
+        switch (ev.key) {
+          case 'ArrowLeft': ev.preventDefault(); moveFocus(root, cell, -1, 0); break;
+          case 'ArrowRight': ev.preventDefault(); moveFocus(root, cell, 1, 0); break;
+          case 'ArrowUp': ev.preventDefault(); moveFocus(root, cell, 0, -1); break;
+          case 'ArrowDown': ev.preventDefault(); moveFocus(root, cell, 0, 1); break;
+          case 'Enter':
+          case ' ': {
+            ev.preventDefault();
+            const person = state.staff.find((p) => p.id === cell.dataset.staff);
+            if (person) openCellMenu(ctx, cell, person, cell.dataset.date, cell.dataset.period);
+            break;
+          }
+          case 'Delete':
+          case 'Backspace': {
+            ev.preventDefault();
+            const entry = state.entries.find(
+              (e) => e.staffId === cell.dataset.staff && e.date === cell.dataset.date && e.period === cell.dataset.period
+            );
+            if (!entry) return;
+            pushUndo(state);
+            state.entries = state.entries.filter((e) => e.id !== entry.id);
+            await ctx.persist('entries');
+            ctx.rerender();
+            break;
+          }
+        }
       });
 
       // Drag & drop: move a session; drop on an occupied cell to swap;
@@ -303,15 +422,18 @@ export default {
         const target = state.entries.find((e) => e.staffId === staffId && e.date === date && e.period === period);
         if (ev.ctrlKey || ev.altKey || ev.metaKey) {
           if (target) { ctx.toast('Cannot copy onto an occupied session'); return; }
+          pushUndo(state);
           state.entries.push({
             id: uid(), staffId, date, period, typeId: src.typeId,
             status: 'planned', source: 'manual', note: '', roomId: null
           });
         } else if (target) {
+          pushUndo(state);
           const pos = { staffId: src.staffId, date: src.date, period: src.period };
           Object.assign(src, { staffId, date, period });
           Object.assign(target, pos);
         } else {
+          pushUndo(state);
           Object.assign(src, { staffId, date, period });
         }
         await ctx.persist('entries');
@@ -320,3 +442,117 @@ export default {
     });
   }
 };
+
+/* ---- staff × day grid ---- */
+function staffGrid(state, people, showDates, dates, today, selected) {
+  const s = state.settings;
+  return `
+    <table class="rota">
+      <thead>
+        <tr>
+          <th rowspan="2">Staff</th>
+          ${showDates.map((d) => `<th colspan="2" class="day${d === today ? ' today' : ''}">${esc(fmtDay(d))}</th>`).join('')}
+          <th rowspan="2" title="Sessions rostered this week / contracted per week">Σ</th>
+        </tr>
+        <tr>${showDates.map((d) => `<th class="${d === today ? 'today' : ''}">AM</th><th class="${d === today ? 'today' : ''}">PM</th>`).join('')}</tr>
+      </thead>
+      <tbody>
+        ${people.map((p) => {
+          const rostered = state.entries.filter(
+            (e) => e.staffId === p.id && dates.includes(e.date) && ACTIVE.includes(e.status)
+          ).length;
+          const over = p.contractedSessions > 0 && rostered > p.contractedSessions;
+          return `
+          <tr>
+            <td class="staffname">${staffLabel(p)}</td>
+            ${showDates.map((d) => {
+              const onLeave = approvedLeaveFor(state.leave, p.id, d);
+              return ['am', 'pm'].map((period) => {
+                const entry = state.entries.find((e) => e.staffId === p.id && e.date === d && e.period === period);
+                const room = entry && entry.roomId ? (state.rooms || []).find((r) => r.id === entry.roomId) : null;
+                const extra = entry ? [room && room.name, entry.note].filter(Boolean).join(' — ') : '';
+                let inner;
+                if (entry && entry.status === 'vacancy') inner = typeChip(entry.typeId, 'vacancy', extra);
+                else if (onLeave) inner = leaveChip(onLeave);
+                else if (entry) inner = typeChip(entry.typeId, entry.status, extra);
+                else inner = '<span class="empty">·</span>';
+                if (entry && !onLeave && (room || entry.note)) {
+                  inner += `<div class="roomtag">${esc(room ? room.name : '')}${entry.note ? (room ? ' ' : '') + '📝' : ''}</div>`;
+                }
+                const isSelected = selected.includes(`${p.id}|${d}|${period}`);
+                return `<td class="cell${d === today ? ' today' : ''}${isSelected ? ' selected' : ''}"${entry ? ' draggable="true"' : ''} data-staff="${esc(p.id)}" data-date="${esc(d)}" data-period="${period}">${inner}</td>`;
+              }).join('');
+            }).join('')}
+            <td class="right" title="${rostered} rostered / ${esc(String(p.contractedSessions))} contracted" style="${over ? 'color:var(--med);font-weight:700' : rostered < p.contractedSessions ? 'color:var(--muted)' : ''}">${rostered}/${esc(String(p.contractedSessions))}</td>
+          </tr>
+        `;
+        }).join('')}
+        ${people.length ? '' : `<tr><td colspan="99" class="muted">No staff yet — add your team under Staff, or load the demo dataset from Settings.</td></tr>`}
+      </tbody>
+      ${people.length ? `
+      <tfoot>
+        <tr>
+          <th>Clinical on site</th>
+          ${showDates.map((d) => ['am', 'pm'].map((period) => {
+            const present = state.entries.filter((e) => {
+              if (e.date !== d || e.period !== period) return false;
+              if (!ACTIVE.includes(e.status)) return false;
+              const t = typeById(e.typeId);
+              if (!t || !t.clinical) return false;
+              const person = state.staff.find((x) => x.id === e.staffId);
+              return person && !approvedLeaveFor(state.leave, person.id, d);
+            });
+            const duty = present.some((e) => {
+              const person = state.staff.find((x) => x.id === e.staffId);
+              return e.typeId === 'duty' && person && person.dutyEligible;
+            });
+            if (!s.openDays.includes(dayKey(d))) return '<th class="muted">—</th>';
+            return `<th title="${present.length} clinical staff, duty ${duty ? 'covered' : 'NOT covered'}" style="color:${duty ? 'var(--ok)' : 'var(--high)'}">${present.length} ${duty ? '✓' : '✗'}</th>`;
+          }).join('')).join('')}
+          <th></th>
+        </tr>
+      </tfoot>` : ''}
+    </table>
+  `;
+}
+
+/* ---- rooms × day pivot ---- */
+function roomGrid(state, rooms, showDates, today) {
+  const rows = [...rooms, { id: null, name: 'Unassigned' }];
+  const occupants = (roomId, date, period) =>
+    state.entries.filter((e) => {
+      if (e.date !== date || e.period !== period || !ACTIVE.includes(e.status)) return false;
+      if (roomId) return e.roomId === roomId;
+      const t = typeById(e.typeId);
+      return !e.roomId && t && t.clinical && t.buildsClinic; // unassigned row: clinic sessions that need a room
+    });
+  return `
+    <table class="rota">
+      <thead>
+        <tr>
+          <th rowspan="2">Room</th>
+          ${showDates.map((d) => `<th colspan="2" class="day${d === today ? ' today' : ''}">${esc(fmtDay(d))}</th>`).join('')}
+        </tr>
+        <tr>${showDates.map((d) => `<th class="${d === today ? 'today' : ''}">AM</th><th class="${d === today ? 'today' : ''}">PM</th>`).join('')}</tr>
+      </thead>
+      <tbody>
+        ${rows.map((room) => `
+          <tr>
+            <td class="staffname">${esc(room.name)}</td>
+            ${showDates.map((d) => ['am', 'pm'].map((period) => {
+              const here = occupants(room.id, d, period);
+              const chips = here.map((e) => {
+                const person = state.staff.find((p) => p.id === e.staffId);
+                const t = typeById(e.typeId);
+                if (!person || !t) return '';
+                return `<span class="chip" style="background:${esc(t.colour)}" title="${esc(`${person.name} — ${t.name}`)}">${esc(shortName(person.name))}</span>`;
+              }).join(' ');
+              const clash = room.id && here.length > 1;
+              return `<td class="${d === today ? 'today' : ''}" style="text-align:center;${clash ? 'box-shadow:inset 0 0 0 2px var(--high)' : ''}">${chips || '<span class="empty">·</span>'}</td>`;
+            }).join('')).join('')}
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}

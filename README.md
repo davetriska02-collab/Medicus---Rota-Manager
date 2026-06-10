@@ -20,7 +20,9 @@ the live Medicus appointment book.**
 | **Auto-assign duty** | Fair constraint assignment: converts the surgery/triage session of the eligible GP carrying the lowest duty debt (8-week history, pro-rata to contracted sessions) |
 | **Live sync** | Reads the Medicus appointment book (read-only, via your logged-in session) and diffs it against the rota: missing clinics, ghost clinics, unplanned clinics, unknown clinicians — with one-click clinician import to seed the staff registry |
 | **Sickness HR** | Fit-note expiry and return-to-work tracking, **Bradford Factor** scoring (rolling 52 weeks, configurable bands), and SFE flags when episodes cross the 2-week locum-reimbursement threshold |
-| **Rooms** | Room registry, per-session room assignment from the rota grid, double-booking warnings |
+| **Rooms** | Room registry, per-session room assignment from the rota grid, double-booking warnings, and a rooms × day pivot view |
+| **Cover assistant** | Same-day sickness button punches out the rota and ranks cover candidates (spare contracted capacity → extra sessions → locums) with one-click assignment |
+| **Editing UX** | Drag & drop (move/swap/copy), Shift-click multi-select bulk editing, keyboard navigation, 30-level undo (Ctrl+Z), copy previous week, print stylesheet, per-clinician ICS calendar export |
 | **Data** | Versioned backup export/import, demo dataset, no patient-identifiable data ever persisted |
 
 ## Install

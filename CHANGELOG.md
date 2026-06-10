@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.3.0 — 2026-06-10
+
+Everything from the deferred list, plus the cover assistant.
+
+- **Undo** on the rota: every grid mutation (cell edits, drag/swap/copy, bulk edits, keyboard
+  deletes, copy-week, generation, auto-duty) is undoable — toolbar button or Ctrl+Z, 30 levels.
+- **Multi-select bulk editing**: Shift-click cells to select; a floating bar sets the session
+  type, sets/clears the room, or clears the lot in one go (leave days skipped).
+- **Rooms view**: a rooms × day/period pivot of the same week — who is in each room per session,
+  clashes outlined in red, plus an Unassigned row of clinic sessions still needing a room.
+- **Keyboard navigation**: arrow keys move around the grid, Enter/Space opens the cell editor,
+  Delete clears a session, Escape closes the menu.
+- **ICS calendar export** per clinician from the Staff page — RFC 5545 VEVENTs (AM 08:00–13:00,
+  PM 13:00–18:30 local), rooms as LOCATION, notes as DESCRIPTION; vacancies excluded.
+- **Same-day sickness assistant** (dashboard): mark someone sick today — approves the episode,
+  punches out their sessions — and the cover worklist now ranks who could take each vacancy:
+  same role group, free that period, ordered by unrostered contracted capacity, then extra
+  sessions, then locums. One click assigns the cover and inherits the freed room.
+- New engine modules `engine/ics.js` and `engine/cover.js`, fully unit-tested.
+
 ## 1.2.0 — 2026-06-10
 
 UI pass: fluid rota editing and a full glassmorphism redesign.

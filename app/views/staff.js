@@ -4,7 +4,8 @@
 import { esc } from '../../shared/esc.js';
 import { ROLES, EMPLOYMENT_TYPES, newStaff, roleById } from '../../shared/model.js';
 import { uid } from '../../shared/store.js';
-import { staffSorted } from './ui.js';
+import { staffICS } from '../../engine/ics.js';
+import { staffSorted, download } from './ui.js';
 
 export default {
   render(root, ctx) {
@@ -19,7 +20,7 @@ export default {
         <span class="sub">${state.staff.length} people</span>
       </div>
       <table>
-        <thead><tr><th>Name</th><th>Role</th><th>Employment</th><th>Sessions/wk</th><th>Flags</th><th>Medicus name</th></tr></thead>
+        <thead><tr><th>Name</th><th>Role</th><th>Employment</th><th>Sessions/wk</th><th>Flags</th><th>Medicus name</th><th title="Export this person's rota as an .ics calendar">Calendar</th></tr></thead>
         <tbody>
           ${staffSorted(state.staff).map((p) => `
             <tr class="clickable" data-id="${esc(p.id)}">
@@ -29,9 +30,10 @@ export default {
               <td>${esc(String(p.contractedSessions))}</td>
               <td class="sub">${[p.dutyEligible ? 'duty' : '', p.supervisor ? 'supervisor' : '', p.prescriber ? 'prescriber' : ''].filter(Boolean).join(', ')}</td>
               <td class="sub">${esc(p.medicusName || '—')}</td>
+              <td><button class="small" data-ics="${esc(p.id)}">Export .ics</button></td>
             </tr>
           `).join('')}
-          ${state.staff.length ? '' : '<tr><td colspan="6" class="muted">No staff yet. Add people here, or import clinicians from the Medicus appointment book via Live sync, or load demo data from Settings.</td></tr>'}
+          ${state.staff.length ? '' : '<tr><td colspan="7" class="muted">No staff yet. Add people here, or import clinicians from the Medicus appointment book via Live sync, or load demo data from Settings.</td></tr>'}
         </tbody>
       </table>
       ${editing ? form(editing, editingId === 'new') : ''}
@@ -44,6 +46,18 @@ export default {
     };
     root.querySelectorAll('tr.clickable').forEach((tr) => {
       tr.onclick = () => { state.ui.staffEditing = tr.dataset.id; ctx.rerender(); };
+    });
+    root.querySelectorAll('[data-ics]').forEach((btn) => {
+      btn.onclick = (ev) => {
+        ev.stopPropagation(); // don't open the row editor
+        const person = state.staff.find((p) => p.id === btn.dataset.ics);
+        if (!person) return;
+        const sessions = state.entries.filter((e) => e.staffId === person.id).length;
+        if (!sessions) { ctx.toast(`${person.name} has no rota sessions to export`); return; }
+        const slug = person.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        download(`rota-${slug}.ics`, staffICS({ person, entries: state.entries, rooms: state.rooms || [] }), 'text/calendar');
+        ctx.toast(`Calendar exported for ${person.name}`);
+      };
     });
 
     const f = root.querySelector('#staffform');

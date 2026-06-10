@@ -5,8 +5,11 @@ import { esc } from '../../shared/esc.js';
 import { todayISO, mondayOf, weekDates, fmtDay } from '../../shared/time.js';
 import { typeById } from '../../shared/model.js';
 import { checkWeek, capacitySummary } from '../../engine/rules.js';
-import { approvedLeaveFor, sfeReimbursementFlags, fitNoteFlags } from '../../engine/leave.js';
+import { approvedLeaveFor, sfeReimbursementFlags, fitNoteFlags, sessionsInRange, applyApprovedLeave } from '../../engine/leave.js';
 import { bradfordRows } from '../../engine/bradford.js';
+import { rankCover, applyCover } from '../../engine/cover.js';
+import { uid } from '../../shared/store.js';
+import { staffSorted } from './ui.js';
 import { warnHTML } from './ui.js';
 
 export default {
@@ -62,19 +65,39 @@ export default {
         ${warnings.length > 10 ? `<div class="sub" style="margin-top:6px">…and ${warnings.length - 10} more on the Rota page.</div>` : ''}
       </div>
 
+      ${state.staff.length ? `
+        <div class="card">
+          <h2 class="mt0">Same-day sickness</h2>
+          <div class="toolbar" style="margin-bottom:0">
+            <select id="sickwho">${staffSorted(state.staff).map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>
+            <button id="sickgo" class="danger">Mark sick today</button>
+            <span class="sub">Approves a sickness episode for today, punches out their sessions and lines up cover options below.</span>
+          </div>
+        </div>` : ''}
+
       ${vacancies.length ? `
         <div class="card">
           <h2 class="mt0">Cover worklist</h2>
-          <table>
-            <thead><tr><th>Date</th><th>Session</th><th>Was</th><th>Note</th></tr></thead>
-            <tbody>
-              ${vacancies.slice(0, 12).map((e) => {
-                const p = state.staff.find((s) => s.id === e.staffId);
-                const t = typeById(e.typeId);
-                return `<tr><td>${esc(fmtDay(e.date))} ${e.period.toUpperCase()}</td><td>${esc(t ? t.name : e.typeId)}</td><td>${esc(p ? p.name : '?')}</td><td class="sub">${esc(e.note || '')}</td></tr>`;
-              }).join('')}
-            </tbody>
-          </table>
+          ${vacancies.slice(0, 12).map((e) => {
+            const p = state.staff.find((s) => s.id === e.staffId);
+            const t = typeById(e.typeId);
+            const options = rankCover({ vacancy: e, staff: state.staff, entries: state.entries, leaveList: state.leave }).slice(0, 4);
+            return `
+              <div style="border-bottom:1px solid var(--line);padding:8px 0">
+                <div><strong>${esc(fmtDay(e.date))} ${e.period.toUpperCase()}</strong> — ${esc(t ? t.name : e.typeId)} (was ${esc(p ? p.name : '?')})
+                  ${e.note ? `<span class="sub">· ${esc(e.note)}</span>` : ''}</div>
+                ${options.length ? `
+                  <details style="margin-top:4px"><summary class="sub">Cover options (${options.length})</summary>
+                    ${options.map((c) => `
+                      <div class="toolbar" style="margin:6px 0 0">
+                        <span>${esc(c.name)}${c.isLocum ? ' <span class="pill requested">locum</span>' : ''}</span>
+                        <span class="sub">${esc(c.reason)}</span>
+                        <span class="spacer"></span>
+                        <button class="small primary" data-assign="${esc(e.id)}|${esc(c.staffId)}">Assign</button>
+                      </div>`).join('')}
+                  </details>` : '<div class="sub" style="margin-top:4px">No eligible cover found — consider an external locum.</div>'}
+              </div>`;
+          }).join('')}
         </div>` : ''}
 
       ${state.staff.length ? '' : `
@@ -87,5 +110,38 @@ export default {
           </ol>
         </div>`}
     `;
+
+    const sickBtn = root.querySelector('#sickgo');
+    if (sickBtn) sickBtn.onclick = async () => {
+      const person = state.staff.find((p) => p.id === root.querySelector('#sickwho').value);
+      if (!person) return;
+      if (!confirm(`Mark ${person.name} sick for today and free their sessions for cover?`)) return;
+      const req = {
+        id: uid(), staffId: person.id, type: 'sick',
+        startDate: today, endDate: today, status: 'approved',
+        rtwDone: false, note: 'Same-day sickness', createdAt: new Date().toISOString()
+      };
+      req.sessions = sessionsInRange(person, today, today, state.entries, state.settings);
+      state.leave.push(req);
+      const applied = applyApprovedLeave(req, state.entries);
+      state.entries = applied.entries;
+      await ctx.persist('leave', 'entries');
+      ctx.toast(`${person.name} marked sick — ${applied.vacancies} session(s) need cover`);
+      ctx.rerender();
+    };
+
+    root.querySelectorAll('[data-assign]').forEach((btn) => {
+      btn.onclick = async () => {
+        const [vacancyId, staffId] = btn.dataset.assign.split('|');
+        const vacancy = state.entries.find((e) => e.id === vacancyId);
+        const candidate = state.staff.find((s) => s.id === staffId);
+        if (!vacancy || !candidate) return;
+        const result = applyCover({ vacancy, candidate: { staffId: candidate.id, name: candidate.name }, entries: state.entries });
+        state.entries = result.entries;
+        await ctx.persist('entries');
+        ctx.toast(`${candidate.name} assigned to cover ${fmtDay(vacancy.date)} ${vacancy.period.toUpperCase()}`);
+        ctx.rerender();
+      };
+    });
   }
 };
