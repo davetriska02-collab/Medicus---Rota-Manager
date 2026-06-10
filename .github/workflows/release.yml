@@ -46,11 +46,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release view "v${{ steps.version.outputs.version }}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/v${{ steps.version.outputs.version }}")
+          echo "Existence check returned HTTP $STATUS"
+          if [ "$STATUS" = "200" ]; then
             echo "release_exists=true" >> "$GITHUB_OUTPUT"
             echo "Release v${{ steps.version.outputs.version }} already exists — nothing to do."
-          else
+          elif [ "$STATUS" = "404" ]; then
             echo "release_exists=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Unexpected HTTP $STATUS checking for existing release — token problem?"
+            exit 1
           fi
 
       - name: Build extension zip
@@ -82,17 +90,48 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION=${{ steps.version.outputs.version }}
-          cat > release-notes.md <<EOF
-          Medicus Rota Manager v$VERSION.
+          API="https://api.github.com/repos/$GITHUB_REPOSITORY"
+          AUTH="Authorization: Bearer $GH_TOKEN"
 
-          Download \`medicus-rota-manager-v$VERSION.zip\` below, unzip it, then
-          Chrome → \`chrome://extensions\` → enable Developer mode →
-          **Load unpacked** → select the unzipped folder.
+          BODY=$(node -e '
+            const v = process.argv[1];
+            const repo = process.env.GITHUB_REPOSITORY;
+            const notes = [
+              `Medicus Rota Manager v${v}.`,
+              ``,
+              `Download \`medicus-rota-manager-v${v}.zip\` below, unzip it, then`,
+              `Chrome → \`chrome://extensions\` → enable Developer mode →`,
+              `**Load unpacked** → select the unzipped folder.`,
+              ``,
+              `Changes: see [CHANGELOG.md](https://github.com/${repo}/blob/main/CHANGELOG.md).`
+            ].join("\n");
+            console.log(JSON.stringify({
+              tag_name: `v${v}`,
+              target_commitish: process.env.GITHUB_SHA,
+              name: `Medicus Rota Manager v${v}`,
+              body: notes,
+              draft: false,
+              prerelease: false
+            }));
+          ' "$VERSION")
 
-          Changes: see [CHANGELOG.md](https://github.com/$GITHUB_REPOSITORY/blob/main/CHANGELOG.md).
-          EOF
-          gh release create "v$VERSION" "medicus-rota-manager-v$VERSION.zip" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "Medicus Rota Manager v$VERSION" \
-            --notes-file release-notes.md
+          HTTP=$(curl -s -o resp.json -w '%{http_code}' -X POST \
+            -H "$AUTH" -H "Accept: application/vnd.github+json" \
+            "$API/releases" -d "$BODY")
+          if [ "$HTTP" != "201" ]; then
+            echo "Response:" && cat resp.json
+            echo "::error::Release creation failed with HTTP $HTTP"
+            exit 1
+          fi
+
+          UPLOAD_URL=$(node -p "JSON.parse(require('fs').readFileSync('resp.json')).upload_url.replace(/\{.*\}$/, '')")
+          HTTP=$(curl -s -o upload.json -w '%{http_code}' -X POST \
+            -H "$AUTH" -H "Content-Type: application/zip" \
+            "$UPLOAD_URL?name=medicus-rota-manager-v$VERSION.zip" \
+            --data-binary "@medicus-rota-manager-v$VERSION.zip")
+          if [ "$HTTP" != "201" ]; then
+            echo "Response:" && cat upload.json
+            echo "::error::Asset upload failed with HTTP $HTTP"
+            exit 1
+          fi
+          echo "Released v$VERSION with zip attached."
