@@ -4,7 +4,7 @@
 
 import { esc } from '../../shared/esc.js';
 import { weekDates, dayKey, fmtDay, addDays, mondayOf, todayISO } from '../../shared/time.js';
-import { SESSION_TYPES } from '../../shared/model.js';
+import { SESSION_TYPES, typeById } from '../../shared/model.js';
 import { uid } from '../../shared/store.js';
 import { checkWeek, capacitySummary, dutyFairness } from '../../engine/rules.js';
 import { generateEntries } from '../../engine/template.js';
@@ -105,17 +105,21 @@ export default {
 
     root.innerHTML = `
       <h1>Rota</h1>
+      <div class="printhead">Rota — ${esc(fmtDay(dates[0]))} to ${esc(fmtDay(dates[6]))}</div>
       <div class="toolbar">
         <button id="prev">‹</button>
         <button id="todaybtn">This week</button>
         <button id="next">›</button>
+        <input type="date" id="jump" value="${esc(state.weekMonday)}" title="Jump to week">
         <span class="weeklabel">${esc(fmtDay(dates[0]))} – ${esc(fmtDay(dates[6]))}</span>
         <span class="spacer"></span>
+        <button id="copyweek" title="Copy last week's sessions into empty cells this week">Copy previous week</button>
         <select id="genweeks">
           ${[1, 2, 4, 6, 8, 12].map((n) => `<option value="${n}">${n} week${n > 1 ? 's' : ''}</option>`).join('')}
         </select>
         <button id="generate">Generate from templates</button>
         <button id="autoduty" class="primary">Auto-assign duty</button>
+        <button id="printbtn" title="Print this week">Print</button>
       </div>
       <div class="rotawrap">
         <table class="rota">
@@ -123,11 +127,18 @@ export default {
             <tr>
               <th rowspan="2">Staff</th>
               ${showDates.map((d) => `<th colspan="2" class="day${d === today ? ' today' : ''}">${esc(fmtDay(d))}</th>`).join('')}
+              <th rowspan="2" title="Sessions rostered this week / contracted per week">Σ</th>
             </tr>
             <tr>${showDates.map((d) => `<th class="${d === today ? 'today' : ''}">AM</th><th class="${d === today ? 'today' : ''}">PM</th>`).join('')}</tr>
           </thead>
           <tbody>
-            ${people.map((p) => `
+            ${people.map((p) => {
+              const rostered = state.entries.filter(
+                (e) => e.staffId === p.id && dates.includes(e.date) &&
+                  (e.status === 'planned' || e.status === 'confirmed' || e.status === 'covered')
+              ).length;
+              const over = p.contractedSessions > 0 && rostered > p.contractedSessions;
+              return `
               <tr>
                 <td class="staffname">${staffLabel(p)}</td>
                 ${showDates.map((d) => {
@@ -144,15 +155,42 @@ export default {
                     if (entry && !onLeave && (room || entry.note)) {
                       inner += `<div class="roomtag">${esc(room ? room.name : '')}${entry.note ? (room ? ' ' : '') + '📝' : ''}</div>`;
                     }
-                    return `<td class="cell${d === today ? ' today' : ''}" data-staff="${esc(p.id)}" data-date="${esc(d)}" data-period="${period}">${inner}</td>`;
+                    return `<td class="cell${d === today ? ' today' : ''}"${entry ? ' draggable="true"' : ''} data-staff="${esc(p.id)}" data-date="${esc(d)}" data-period="${period}">${inner}</td>`;
                   }).join('');
                 }).join('')}
+                <td class="right" title="${rostered} rostered / ${esc(String(p.contractedSessions))} contracted" style="${over ? 'color:var(--med);font-weight:700' : rostered < p.contractedSessions ? 'color:var(--muted)' : ''}">${rostered}/${esc(String(p.contractedSessions))}</td>
               </tr>
-            `).join('')}
+            `;
+            }).join('')}
             ${people.length ? '' : `<tr><td colspan="99" class="muted">No staff yet — add your team under Staff, or load the demo dataset from Settings.</td></tr>`}
           </tbody>
+          ${people.length ? `
+          <tfoot>
+            <tr>
+              <th>Clinical on site</th>
+              ${showDates.map((d) => ['am', 'pm'].map((period) => {
+                const present = state.entries.filter((e) => {
+                  if (e.date !== d || e.period !== period) return false;
+                  if (e.status !== 'planned' && e.status !== 'confirmed' && e.status !== 'covered') return false;
+                  const t = typeById(e.typeId);
+                  if (!t || !t.clinical) return false;
+                  const person = state.staff.find((x) => x.id === e.staffId);
+                  return person && !approvedLeaveFor(state.leave, person.id, d);
+                });
+                const duty = present.some((e) => {
+                  const person = state.staff.find((x) => x.id === e.staffId);
+                  return e.typeId === 'duty' && person && person.dutyEligible;
+                });
+                const open = s.openDays.includes(dayKey(d));
+                if (!open) return '<th class="muted">—</th>';
+                return `<th title="${present.length} clinical staff, duty ${duty ? 'covered' : 'NOT covered'}" style="color:${duty ? 'var(--ok)' : 'var(--high)'}">${present.length} ${duty ? '✓' : '✗'}</th>`;
+              }).join('')).join('')}
+              <th></th>
+            </tr>
+          </tfoot>` : ''}
         </table>
       </div>
+      <div class="sub" style="margin:6px 0 14px">Click a cell to edit · drag a session to move it · drop on an occupied cell to swap · hold Ctrl (or Alt) while dropping to copy.</div>
       <div class="card">
         <h2 class="mt0">Checks — ${high ? `<span style="color:var(--high)">${high} high-priority</span>, ` : ''}${warnings.length} total</h2>
         <div class="sub" style="margin-bottom:8px">
@@ -166,6 +204,32 @@ export default {
     root.querySelector('#prev').onclick = () => { state.weekMonday = addDays(state.weekMonday, -7); ctx.rerender(); };
     root.querySelector('#next').onclick = () => { state.weekMonday = addDays(state.weekMonday, 7); ctx.rerender(); };
     root.querySelector('#todaybtn').onclick = () => { state.weekMonday = mondayOf(todayISO()); ctx.rerender(); };
+    root.querySelector('#jump').onchange = (e) => {
+      if (e.target.value) { state.weekMonday = mondayOf(e.target.value); ctx.rerender(); }
+    };
+    root.querySelector('#printbtn').onclick = () => window.print();
+
+    root.querySelector('#copyweek').onclick = async () => {
+      const prevDates = weekDates(addDays(state.weekMonday, -7));
+      let copied = 0;
+      let skipped = 0;
+      const source = state.entries.filter(
+        (e) => prevDates.includes(e.date) && (e.status === 'planned' || e.status === 'confirmed' || e.status === 'covered')
+      );
+      for (const e of source) {
+        const date = addDays(e.date, 7);
+        const occupied = state.entries.some((t) => t.staffId === e.staffId && t.date === date && t.period === e.period);
+        if (occupied || approvedLeaveFor(state.leave, e.staffId, date)) { skipped += 1; continue; }
+        state.entries.push({
+          id: uid(), staffId: e.staffId, date, period: e.period, typeId: e.typeId,
+          status: 'planned', source: 'manual', note: '', roomId: e.roomId || null
+        });
+        copied += 1;
+      }
+      if (copied) await ctx.persist('entries');
+      ctx.toast(`Copied ${copied} session(s) from last week${skipped ? `; ${skipped} skipped (occupied or on leave)` : ''}`);
+      ctx.rerender();
+    };
 
     root.querySelector('#generate').onclick = async () => {
       const weeks = Number(root.querySelector('#genweeks').value);
@@ -205,6 +269,53 @@ export default {
       cell.addEventListener('click', () => {
         const person = state.staff.find((p) => p.id === cell.dataset.staff);
         if (person) openCellMenu(ctx, cell, person, cell.dataset.date, cell.dataset.period);
+      });
+
+      // Drag & drop: move a session; drop on an occupied cell to swap;
+      // Ctrl/Alt-drop copies the session type into an empty cell.
+      cell.addEventListener('dragstart', (ev) => {
+        const entry = state.entries.find(
+          (e) => e.staffId === cell.dataset.staff && e.date === cell.dataset.date && e.period === cell.dataset.period
+        );
+        if (!entry) { ev.preventDefault(); return; }
+        closeMenu();
+        ev.dataTransfer.setData('text/plain', entry.id);
+        ev.dataTransfer.effectAllowed = 'copyMove';
+      });
+      cell.addEventListener('dragover', (ev) => {
+        ev.preventDefault();
+        cell.classList.add('dragover');
+      });
+      cell.addEventListener('dragleave', () => cell.classList.remove('dragover'));
+      cell.addEventListener('drop', async (ev) => {
+        ev.preventDefault();
+        cell.classList.remove('dragover');
+        const src = state.entries.find((e) => e.id === ev.dataTransfer.getData('text/plain'));
+        if (!src) return;
+        const { staff: staffId, date, period } = cell.dataset;
+        if (src.staffId === staffId && src.date === date && src.period === period) return;
+        const person = state.staff.find((p) => p.id === staffId);
+        if (!person) return;
+        if (approvedLeaveFor(state.leave, staffId, date)) {
+          ctx.toast(`${person.name} is on approved leave that day`);
+          return;
+        }
+        const target = state.entries.find((e) => e.staffId === staffId && e.date === date && e.period === period);
+        if (ev.ctrlKey || ev.altKey || ev.metaKey) {
+          if (target) { ctx.toast('Cannot copy onto an occupied session'); return; }
+          state.entries.push({
+            id: uid(), staffId, date, period, typeId: src.typeId,
+            status: 'planned', source: 'manual', note: '', roomId: null
+          });
+        } else if (target) {
+          const pos = { staffId: src.staffId, date: src.date, period: src.period };
+          Object.assign(src, { staffId, date, period });
+          Object.assign(target, pos);
+        } else {
+          Object.assign(src, { staffId, date, period });
+        }
+        await ctx.persist('entries');
+        ctx.rerender();
       });
     });
   }

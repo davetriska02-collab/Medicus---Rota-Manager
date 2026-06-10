@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Medicus Rota Manager",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Rota management for general practice, built around the Medicus EHR: pattern templates, leave guardrails, duty fairness, supervision rules and live appointment-book reconciliation.",
   "permissions": ["storage", "tabs"],
   "host_permissions": [

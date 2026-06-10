@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.2.0 — 2026-06-10
+
+UI pass: fluid rota editing and a full glassmorphism redesign.
+
+- **Drag & drop** on the rota grid: drag a session to move it between staff/days/periods, drop
+  onto an occupied cell to swap the two sessions, hold Ctrl/Alt while dropping to copy the
+  session type into an empty cell. Drops onto approved-leave days are refused with a toast.
+- **Row totals**: sessions rostered vs contracted per person (amber when over).
+- **Coverage footer**: clinical headcount per AM/PM with a duty-cover ✓/✗ at a glance.
+- **Copy previous week**: clones last week's sessions into empty cells (skips occupied cells
+  and people on leave; rooms carried over).
+- **Jump-to-date** picker in the rota toolbar; **Print** button with a dedicated plain-paper
+  print stylesheet (nav/toolbars stripped, week header added, chips colour-printed).
+- **Glass theme**: dark glassmorphism redesign — translucent blurred cards, nav and menus over
+  an ambient gradient; animated view transitions, pop-in cell menu, sliding toast, hover
+  micro-interactions throughout. `prefers-reduced-motion` fully respected; print stays plain.
+
 ## 1.1.0 — 2026-06-10
 
 Sickness HR tooling and rooms.
