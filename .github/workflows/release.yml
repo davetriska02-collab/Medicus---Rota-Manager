@@ -1,0 +1,92 @@
+name: Release
+
+# Packs the extension into a versioned zip and attaches it to a GitHub
+# release. Triggered by version tags (v*) and pushes to main; skips quietly
+# if a release for the manifest version already exists.
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Run tests before releasing
+        run: npm test
+
+      - name: Derive version from manifest
+        id: version
+        run: |
+          VERSION=$(node -p "JSON.parse(require('fs').readFileSync('manifest.json')).version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Verify manifest version matches tag (tag pushes only)
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          MANIFEST_VERSION="${{ steps.version.outputs.version }}"
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$MANIFEST_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::manifest.json version ($MANIFEST_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
+
+      - name: Check if release already exists
+        id: check
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/$TAG")
+          echo "release_exists=$([ "$STATUS" = '200' ] && echo 'true' || echo 'false')" >> "$GITHUB_OUTPUT"
+
+      - name: Build extension zip
+        if: steps.check.outputs.release_exists == 'false'
+        run: |
+          NAME=medicus-rota-manager-v${{ steps.version.outputs.version }}
+          mkdir -p "_build/$NAME"
+          rsync -av \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='.gitignore' \
+            --exclude='_build/' \
+            --exclude='docs/' \
+            --exclude='scripts/' \
+            --exclude='test-*.js' \
+            --exclude='package.json' \
+            --exclude='README.md' \
+            --exclude='CLAUDE.md' \
+            --exclude='.claude/' \
+            --exclude='*.zip' \
+            --exclude='.DS_Store' \
+            ./ "_build/$NAME/"
+          cd _build
+          zip -r "../$NAME.zip" "$NAME/"
+
+      - name: Create GitHub release
+        if: steps.check.outputs.release_exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Medicus Rota Manager ${{ steps.version.outputs.tag }}
+          body: |
+            Medicus Rota Manager ${{ steps.version.outputs.tag }}.
+
+            Download `medicus-rota-manager-v${{ steps.version.outputs.version }}.zip` below,
+            unzip it, then Chrome → `chrome://extensions` → enable Developer mode →
+            **Load unpacked** → select the unzipped folder.
+
+            Changes: see [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md).
+          files: medicus-rota-manager-v${{ steps.version.outputs.version }}.zip
+          draft: false
+          prerelease: false

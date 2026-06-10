@@ -24,6 +24,13 @@ the live Medicus appointment book.**
 
 ## Install
 
+**From a release (recommended):** download the latest
+`medicus-rota-manager-v*.zip` from the [Releases page](../../releases), unzip it, then
+Chrome → `chrome://extensions` → enable **Developer mode** → **Load unpacked** → select the
+unzipped folder.
+
+**From source:**
+
 1. Clone this repository.
 2. Chrome → `chrome://extensions` → enable **Developer mode** → **Load unpacked** → select the repo folder.
 3. Click the extension action button — the app opens in a tab.

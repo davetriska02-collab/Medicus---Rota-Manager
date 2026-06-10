@@ -18,3 +18,5 @@ Initial release.
   clinician import.
 - Dashboard, settings, versioned backup export/import, demo dataset.
 - Engine fully unit-tested (`npm test`, no dependencies).
+- Release engineering: extension icons, CI test workflow, and a release workflow that packs a
+  versioned zip and attaches it to a GitHub release on `v*` tags.
