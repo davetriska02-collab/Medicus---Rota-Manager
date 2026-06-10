@@ -3,7 +3,7 @@
 // part-timers): a leave request consumes one session per templated/rostered
 // session it punches out.
 
-import { datesInRange, dayKey, leaveYearStart, templateWeekIndex, diffDays, todayISO } from '../shared/time.js';
+import { datesInRange, dayKey, leaveYearStart, templateWeekIndex, diffDays, todayISO, addDays } from '../shared/time.js';
 import { roleById, typeById, leaveTypeById } from '../shared/model.js';
 
 export function approvedLeaveFor(leaveList, staffId, dateISO) {
@@ -131,6 +131,32 @@ export function applyApprovedLeave(req, entries) {
     }
   }
   return { entries: updated, vacancies, removed: removedIds.size };
+}
+
+// Fit-note (Med3) and return-to-work compliance on sickness episodes.
+// Self-certification covers the first 7 calendar days; after that an
+// ongoing absence needs a fit note, and ended episodes need a recorded
+// return-to-work conversation (flagged for 30 days, then dropped).
+export function fitNoteFlags(leaveList, staff, asOfISO = todayISO()) {
+  const flags = [];
+  for (const l of leaveList.filter((x) => x.type === 'sick' && x.status === 'approved')) {
+    const person = staff.find((s) => s.id === l.staffId);
+    const name = person ? person.name : '?';
+    const ongoing = l.endDate >= asOfISO && l.startDate <= asOfISO;
+    if (ongoing) {
+      const days = diffDays(l.startDate, asOfISO) + 1;
+      if (!l.fitNoteUntil && days > 7) {
+        flags.push({ severity: 'high', leaveId: l.id, message: `${name}: off sick ${days} days with no fit note recorded (self-certification covers 7)` });
+      } else if (l.fitNoteUntil && l.fitNoteUntil < asOfISO) {
+        flags.push({ severity: 'high', leaveId: l.id, message: `${name}: fit note expired on ${l.fitNoteUntil} but they are still off` });
+      } else if (l.fitNoteUntil && l.fitNoteUntil <= addDays(asOfISO, 7)) {
+        flags.push({ severity: 'medium', leaveId: l.id, message: `${name}: fit note expires ${l.fitNoteUntil} — chase a renewal or plan the return` });
+      }
+    } else if (l.endDate < asOfISO && !l.rtwDone && diffDays(l.endDate, asOfISO) <= 30) {
+      flags.push({ severity: 'medium', leaveId: l.id, message: `${name}: return-to-work conversation not recorded after sickness ending ${l.endDate}` });
+    }
+  }
+  return flags;
 }
 
 // Sickness episodes ≥ 2 weeks qualify for SFE locum-cover reimbursement —

@@ -114,5 +114,6 @@ export const DEFAULT_SETTINGS = {
   maxSimultaneousLeave: { gp: 2, nursing: 1, arrs: 1, nonclinical: 2 },
   apptsPerSurgerySession: 15, // ~3h patient-facing per 4h10m session (BMA safe working)
   accessBenchmarkPer1000: 72, // appointments per 1,000 patients per week
+  bradfordThresholds: { monitor: 50, high: 200, severe: 500 },
   templateAnchorMonday: null
 };

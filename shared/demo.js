@@ -57,8 +57,27 @@ export function demoData() {
       id: uid(), staffId: staff[3].id, type: 'annual',
       startDate: addDays(monday, 7), endDate: addDays(monday, 11),
       status: 'requested', sessions: 4, note: 'Half-term', createdAt: new Date().toISOString()
+    },
+    // Sickness history for Megan (nurse): shows Bradford scoring, an
+    // outstanding return-to-work conversation and the fit-note editor.
+    {
+      id: uid(), staffId: staff[6].id, type: 'sick',
+      startDate: addDays(monday, -12), endDate: addDays(monday, -11),
+      status: 'approved', sessions: 4, rtwDone: false, createdAt: new Date().toISOString()
+    },
+    {
+      id: uid(), staffId: staff[6].id, type: 'sick',
+      startDate: addDays(monday, -40), endDate: addDays(monday, -38),
+      status: 'approved', sessions: 6, rtwDone: true, createdAt: new Date().toISOString()
+    },
+    {
+      id: uid(), staffId: staff[6].id, type: 'sick',
+      startDate: addDays(monday, -75), endDate: addDays(monday, -75),
+      status: 'approved', sessions: 2, rtwDone: true, createdAt: new Date().toISOString()
     }
   ];
+
+  const rooms = ['Room 1', 'Room 2', 'Room 3', 'Treatment 1'].map((name) => ({ id: uid(), name }));
 
   const settings = {
     ...DEFAULT_SETTINGS,
@@ -66,7 +85,7 @@ export function demoData() {
     templateAnchorMonday: monday
   };
 
-  return { staff, entries: [], leave, settings };
+  return { staff, entries: [], leave, rooms, settings };
 }
 
 // A sample Medicus embedded-overview payload (synthetic) so the

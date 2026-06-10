@@ -19,7 +19,8 @@ the live Medicus appointment book.**
 | **Rules engine** | Duty-doctor cover every open AM/PM · registrar sessions require a co-rostered eligible supervising GP (never a locum) · HCA sessions require a registered professional in the building · capacity vs the 72 appts/1,000 patients/week access benchmark · duty fairness pro-rata to contracted sessions. All warnings, no hard blocks — guidance, not regulation |
 | **Auto-assign duty** | Fair constraint assignment: converts the surgery/triage session of the eligible GP carrying the lowest duty debt (8-week history, pro-rata to contracted sessions) |
 | **Live sync** | Reads the Medicus appointment book (read-only, via your logged-in session) and diffs it against the rota: missing clinics, ghost clinics, unplanned clinics, unknown clinicians — with one-click clinician import to seed the staff registry |
-| **SFE tracker** | Flags sickness episodes crossing the 2-week threshold where locum cover becomes reimbursable |
+| **Sickness HR** | Fit-note expiry and return-to-work tracking, **Bradford Factor** scoring (rolling 52 weeks, configurable bands), and SFE flags when episodes cross the 2-week locum-reimbursement threshold |
+| **Rooms** | Room registry, per-session room assignment from the rota grid, double-booking warnings |
 | **Data** | Versioned backup export/import, demo dataset, no patient-identifiable data ever persisted |
 
 ## Install

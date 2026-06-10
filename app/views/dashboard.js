@@ -5,7 +5,8 @@ import { esc } from '../../shared/esc.js';
 import { todayISO, mondayOf, weekDates, fmtDay } from '../../shared/time.js';
 import { typeById } from '../../shared/model.js';
 import { checkWeek, capacitySummary } from '../../engine/rules.js';
-import { approvedLeaveFor, sfeReimbursementFlags } from '../../engine/leave.js';
+import { approvedLeaveFor, sfeReimbursementFlags, fitNoteFlags } from '../../engine/leave.js';
+import { bradfordRows } from '../../engine/bradford.js';
 import { warnHTML } from './ui.js';
 
 export default {
@@ -21,6 +22,9 @@ export default {
     const vacancies = state.entries.filter((e) => e.status === 'vacancy' && e.date >= today);
     const pending = state.leave.filter((l) => l.status === 'requested');
     const sfe = sfeReimbursementFlags(state.leave, state.staff);
+    const fitFlags = fitNoteFlags(state.leave, state.staff);
+    const bradfordFlagged = bradfordRows({ staff: state.staff, leaveList: state.leave, settings: state.settings })
+      .filter((r) => r.band === 'high' || r.band === 'severe');
 
     const dutyToday = {};
     for (const period of ['am', 'pm']) {
@@ -46,7 +50,11 @@ export default {
       </div>
 
       ${onLeaveToday.length ? `<div class="card"><strong>On leave today:</strong> ${esc(onLeaveToday.join(', '))}</div>` : ''}
-      ${sfe.length ? `<div class="card">${sfe.map((f) => `<div class="warn"><span class="sev ${f.eligible ? 'high' : 'medium'}">SFE</span><span>${esc(f.name)} — sickness day ${f.days}${f.eligible ? ', locum reimbursement claimable' : ''}</span></div>`).join('')}</div>` : ''}
+      ${sfe.length || fitFlags.length || bradfordFlagged.length ? `<div class="card">
+        ${sfe.map((f) => `<div class="warn"><span class="sev ${f.eligible ? 'high' : 'medium'}">SFE</span><span>${esc(f.name)} — sickness day ${f.days}${f.eligible ? ', locum reimbursement claimable' : ''}</span></div>`).join('')}
+        ${fitFlags.map((f) => `<div class="warn"><span class="sev ${esc(f.severity)}">fit note</span><span>${esc(f.message)}</span></div>`).join('')}
+        ${bradfordFlagged.map((r) => `<div class="warn"><span class="sev ${r.band === 'severe' ? 'high' : 'medium'}">Bradford</span><span>${esc(r.name)} — score ${r.score} (${r.episodes} episodes, ${r.days} days, 52-week rolling) — <a href="#leave">review</a></span></div>`).join('')}
+      </div>` : ''}
 
       <div class="card">
         <h2 class="mt0">This week's checks <a href="#rota" class="sub" style="font-weight:400">open rota →</a></h2>

@@ -94,6 +94,7 @@ table.rota td.staffname { white-space: nowrap; font-weight: 600; }
 .chip.leave { background: #f59e0b; }
 .chip.sick { background: #b45309; }
 .empty { color: #cbd5e1; }
+.roomtag { font-size: 9px; color: var(--muted); margin-top: 2px; line-height: 1.1; }
 
 /* cell editor */
 #cellmenu {
@@ -120,6 +121,10 @@ table.rota td.staffname { white-space: nowrap; font-weight: 600; }
 .pill.requested { background: #fef3c7; color: #92400e; }
 .pill.approved { background: #d1fae5; color: #065f46; }
 .pill.declined, .pill.cancelled { background: #fee2e2; color: #991b1b; }
+.pill.bf-ok { background: #d1fae5; color: #065f46; }
+.pill.bf-monitor { background: #fef3c7; color: #92400e; }
+.pill.bf-high { background: #ffedd5; color: #9a3412; }
+.pill.bf-severe { background: #fee2e2; color: #991b1b; }
 .muted { color: var(--muted); }
 .right { text-align: right; }
 .mt0 { margin-top: 0; }

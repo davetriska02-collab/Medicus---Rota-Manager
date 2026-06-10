@@ -21,6 +21,7 @@ function openCellMenu(ctx, cell, person, date, period) {
   closeMenu();
   const { state } = ctx;
   const entry = state.entries.find((e) => e.staffId === person.id && e.date === date && e.period === period);
+  const rooms = state.rooms || [];
   const menu = document.createElement('div');
   menu.id = 'cellmenu';
   menu.innerHTML = `
@@ -28,6 +29,12 @@ function openCellMenu(ctx, cell, person, date, period) {
     ${SESSION_TYPES.map((t) => `
       <button data-type="${esc(t.id)}"><span class="chip" style="background:${esc(t.colour)}">${esc(t.short)}</span>${esc(t.name)}</button>
     `).join('')}
+    ${entry && rooms.length ? `
+      <div class="who">Room</div>
+      ${rooms.map((r) => `<button data-room="${esc(r.id)}"><span class="chip" style="background:${entry.roomId === r.id ? '#0d9488' : '#cbd5e1'}">RM</span>${esc(r.name)}${entry.roomId === r.id ? ' ✓' : ''}</button>`).join('')}
+      ${entry.roomId ? '<button data-room=""><span class="chip" style="background:#94a3b8">×</span>No room</button>' : ''}
+    ` : ''}
+    ${entry ? '<button data-act="note"><span class="chip" style="background:#64748b">…</span>Edit note</button>' : ''}
     ${entry && entry.status === 'vacancy' ? '<button data-act="covered"><span class="chip covered" style="background:#059669">LOC</span>Mark covered (locum)</button>' : ''}
     ${entry ? '<button data-act="clear"><span class="chip" style="background:#94a3b8">×</span>Clear session</button>' : ''}
   `;
@@ -51,6 +58,12 @@ function openCellMenu(ctx, cell, person, date, period) {
           typeId: btn.dataset.type, status: 'planned', source: 'manual', note: ''
         });
       }
+    } else if ('room' in btn.dataset && entry) {
+      entry.roomId = btn.dataset.room || null;
+    } else if (btn.dataset.act === 'note' && entry) {
+      const note = prompt('Note for this session', entry.note || '');
+      if (note === null) return; // cancelled — keep the menu open state simple: bail without saving
+      entry.note = note.trim();
     } else if (btn.dataset.act === 'covered' && entry) {
       entry.status = 'covered';
       entry.note = 'Covered by locum';
@@ -78,7 +91,7 @@ export default {
     );
     const people = staffSorted(state.staff);
 
-    const warnings = checkWeek({ dates, entries: state.entries, staff: state.staff, leaveList: state.leave, settings: s });
+    const warnings = checkWeek({ dates, entries: state.entries, staff: state.staff, leaveList: state.leave, settings: s, rooms: state.rooms || [] });
     const cap = capacitySummary({ dates, entries: state.entries, staff: state.staff, leaveList: state.leave, settings: s });
     const fairnessWindowStart = addDays(state.weekMonday, -56);
     const fair = dutyFairness({
@@ -121,11 +134,16 @@ export default {
                   const onLeave = approvedLeaveFor(state.leave, p.id, d);
                   return ['am', 'pm'].map((period) => {
                     const entry = state.entries.find((e) => e.staffId === p.id && e.date === d && e.period === period);
+                    const room = entry && entry.roomId ? (state.rooms || []).find((r) => r.id === entry.roomId) : null;
+                    const extra = entry ? [room && room.name, entry.note].filter(Boolean).join(' — ') : '';
                     let inner;
-                    if (entry && entry.status === 'vacancy') inner = typeChip(entry.typeId, 'vacancy');
+                    if (entry && entry.status === 'vacancy') inner = typeChip(entry.typeId, 'vacancy', extra);
                     else if (onLeave) inner = leaveChip(onLeave);
-                    else if (entry) inner = typeChip(entry.typeId, entry.status);
+                    else if (entry) inner = typeChip(entry.typeId, entry.status, extra);
                     else inner = '<span class="empty">·</span>';
+                    if (entry && !onLeave && (room || entry.note)) {
+                      inner += `<div class="roomtag">${esc(room ? room.name : '')}${entry.note ? (room ? ' ' : '') + '📝' : ''}</div>`;
+                    }
                     return `<td class="cell${d === today ? ' today' : ''}" data-staff="${esc(p.id)}" data-date="${esc(d)}" data-period="${period}">${inner}</td>`;
                   }).join('');
                 }).join('')}

@@ -57,6 +57,27 @@ assert.equal(w.filter((x) => x.kind === 'hca').length, 0);
 w = checkWeek({ dates, entries: [e('p1', '2026-06-08', 'am', 'surgery', 'vacancy'), e('p1', '2026-06-08', 'pm', 'duty')], staff: [partner], leaveList: [], settings });
 assert.equal(w.filter((x) => x.kind === 'vacancy').length, 1);
 
+// Room clash: two active sessions in the same room/time -> one warning;
+// different rooms or a vacancy in the room -> none.
+const rooms = [{ id: 'r1', name: 'Room 1' }, { id: 'r2', name: 'Room 2' }];
+const withRoom = (entry, roomId) => ({ ...entry, roomId });
+w = checkWeek({
+  dates, staff: [partner, hca], leaveList: [], settings, rooms,
+  entries: [withRoom(e('p1', '2026-06-08', 'am', 'duty'), 'r1'), withRoom(e('h1', '2026-06-08', 'am', 'surgery'), 'r1')]
+});
+assert.equal(w.filter((x) => x.kind === 'room').length, 1);
+assert.ok(/Room 1 double-booked/.test(w.find((x) => x.kind === 'room').message));
+w = checkWeek({
+  dates, staff: [partner, hca], leaveList: [], settings, rooms,
+  entries: [withRoom(e('p1', '2026-06-08', 'am', 'duty'), 'r1'), withRoom(e('h1', '2026-06-08', 'am', 'surgery'), 'r2')]
+});
+assert.equal(w.filter((x) => x.kind === 'room').length, 0);
+w = checkWeek({
+  dates, staff: [partner, hca], leaveList: [], settings, rooms,
+  entries: [withRoom(e('p1', '2026-06-08', 'am', 'duty'), 'r1'), withRoom(e('h1', '2026-06-08', 'am', 'surgery', 'vacancy'), 'r1')]
+});
+assert.equal(w.filter((x) => x.kind === 'room').length, 0);
+
 // Capacity: 1 GP clinical session × 15 appts vs 2,000-patient list target 144.
 const cap = capacitySummary({ dates, entries: [e('p1', '2026-06-08', 'am', 'surgery')], staff: [partner], leaveList: [], settings });
 assert.equal(cap.gpClinicalSessions, 1);

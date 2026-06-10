@@ -17,6 +17,7 @@ const state = {
   staff: [],
   entries: [],
   leave: [],
+  rooms: [],
   settings: {},
   weekMonday: mondayOf(todayISO()),
   ui: {} // per-view scratch (selected staff member, last sync results, …)

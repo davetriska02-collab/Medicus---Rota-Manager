@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.1.0 — 2026-06-10
+
+Sickness HR tooling and rooms.
+
+- **Bradford Factor**: S²×D over a rolling 52-week window from approved sickness episodes
+  (contiguous records merge into one episode; only working days count). Banded
+  ok/monitor/high/severe with thresholds configurable in Settings; surfaced on the Leave page
+  and as dashboard flags. Triggers a conversation, never automatic action.
+- **Fit notes & return-to-work**: sickness episodes carry a fit-note expiry date and an RTW-done
+  flag, editable on the Leave page. Warnings for: off sick >7 days with no fit note
+  (self-certification limit), fit note expired or expiring within 7 days, and RTW conversation
+  not recorded after an episode ends.
+- **Rooms**: room registry in Settings, room assignment per session from the rota cell menu,
+  room shown under the session chip, and double-booking warnings in the rules engine.
+- Session notes editable from the rota cell menu (shown in the chip tooltip with a 📝 marker).
+- Rooms included in the backup envelope and demo dataset (incl. a sickness history that
+  exercises Bradford and RTW flags).
+
 ## 1.0.0 — 2026-06-10
 
 Initial release.

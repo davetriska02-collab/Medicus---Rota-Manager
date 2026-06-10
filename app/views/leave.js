@@ -6,7 +6,9 @@ import { esc } from '../../shared/esc.js';
 import { LEAVE_TYPES, leaveTypeById } from '../../shared/model.js';
 import { uid } from '../../shared/store.js';
 import { todayISO, fmtRange } from '../../shared/time.js';
-import { leaveBalance, checkLeaveRequest, applyApprovedLeave, sfeReimbursementFlags } from '../../engine/leave.js';
+import { leaveBalance, checkLeaveRequest, applyApprovedLeave, sfeReimbursementFlags, fitNoteFlags } from '../../engine/leave.js';
+import { bradfordRows } from '../../engine/bradford.js';
+import { addDays } from '../../shared/time.js';
 import { staffSorted, warnHTML } from './ui.js';
 
 export default {
@@ -14,17 +16,49 @@ export default {
     const { state } = ctx;
     const people = staffSorted(state.staff);
     const sfe = sfeReimbursementFlags(state.leave, state.staff);
+    const fitFlags = fitNoteFlags(state.leave, state.staff);
+    const recentSick = state.leave
+      .filter((l) => l.type === 'sick' && l.status === 'approved' && l.endDate >= addDays(todayISO(), -30))
+      .sort((a, b) => b.startDate.localeCompare(a.startDate));
+    const bradford = bradfordRows({ staff: state.staff, leaveList: state.leave, settings: state.settings });
     const requested = state.leave.filter((l) => l.status === 'requested');
     const decided = state.leave.filter((l) => l.status !== 'requested')
       .sort((a, b) => b.startDate.localeCompare(a.startDate)).slice(0, 30);
 
     root.innerHTML = `
       <h1>Leave</h1>
-      ${sfe.length ? `
+      ${sfe.length || fitFlags.length || recentSick.length || bradford.length ? `
         <div class="card">
-          <h2 class="mt0">SFE locum reimbursement</h2>
-          ${sfe.map((f) => `<div class="warn"><span class="sev ${f.eligible ? 'high' : 'medium'}">${f.eligible ? 'claim' : 'soon'}</span>
+          <h2 class="mt0">Sickness</h2>
+          ${sfe.map((f) => `<div class="warn"><span class="sev ${f.eligible ? 'high' : 'medium'}">SFE</span>
             <span>${esc(f.name)} — sickness day ${f.days}${f.eligible ? ': locum cover is reimbursable from week 3 under the SFE' : ': reimbursement threshold (14 days) approaching'}</span></div>`).join('')}
+          ${fitFlags.map((f) => `<div class="warn"><span class="sev ${esc(f.severity)}">fit note</span><span>${esc(f.message)}</span></div>`).join('')}
+          ${recentSick.length ? `
+            <table style="margin-top:10px">
+              <thead><tr><th>Staff</th><th>Episode</th><th>Fit note until</th><th>RTW done</th></tr></thead>
+              <tbody>
+                ${recentSick.map((l) => {
+                  const p = state.staff.find((s) => s.id === l.staffId);
+                  return `<tr>
+                    <td>${esc(p ? p.name : '?')}</td>
+                    <td>${esc(fmtRange(l.startDate, l.endDate))}</td>
+                    <td><input type="date" data-fitnote="${esc(l.id)}" value="${esc(l.fitNoteUntil || '')}"></td>
+                    <td><input type="checkbox" data-rtw="${esc(l.id)}" ${l.rtwDone ? 'checked' : ''}></td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>` : ''}
+          ${bradford.length ? `
+            <h2>Bradford Factor (rolling 52 weeks)</h2>
+            <table>
+              <thead><tr><th>Staff</th><th>Episodes</th><th>Working days</th><th>Score (S²×D)</th><th>Band</th></tr></thead>
+              <tbody>
+                ${bradford.map((r) => `<tr><td>${esc(r.name)}</td><td>${r.episodes}</td><td>${r.days}</td><td>${r.score}</td>
+                  <td><span class="pill bf-${esc(r.band)}">${esc(r.band)}</span></td></tr>`).join('')}
+              </tbody>
+            </table>
+            <div class="sub" style="margin-top:6px">Thresholds (Settings): monitor ≥ ${state.settings.bradfordThresholds.monitor}, high ≥ ${state.settings.bradfordThresholds.high}, severe ≥ ${state.settings.bradfordThresholds.severe}. A trigger means a conversation, never automatic action.</div>
+          ` : ''}
         </div>` : ''}
 
       <div class="card">
@@ -108,6 +142,24 @@ export default {
         state.entries = applied.entries;
         await ctx.persist('leave', 'entries');
         ctx.toast(`Approved — ${applied.vacancies} session(s) moved to the cover worklist`);
+        ctx.rerender();
+      };
+    });
+    root.querySelectorAll('[data-fitnote]').forEach((input) => {
+      input.onchange = async () => {
+        const l = state.leave.find((x) => x.id === input.dataset.fitnote);
+        if (!l) return;
+        l.fitNoteUntil = input.value || null;
+        await ctx.persist('leave');
+        ctx.rerender();
+      };
+    });
+    root.querySelectorAll('[data-rtw]').forEach((input) => {
+      input.onchange = async () => {
+        const l = state.leave.find((x) => x.id === input.dataset.rtw);
+        if (!l) return;
+        l.rtwDone = input.checked;
+        await ctx.persist('leave');
         ctx.rerender();
       };
     });

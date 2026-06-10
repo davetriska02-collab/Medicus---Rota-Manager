@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { sessionsInRange, leaveBalance, checkLeaveRequest, applyApprovedLeave, sfeReimbursementFlags } from './engine/leave.js';
+import { sessionsInRange, leaveBalance, checkLeaveRequest, applyApprovedLeave, sfeReimbursementFlags, fitNoteFlags } from './engine/leave.js';
 import { newStaff, blankPattern, DEFAULT_SETTINGS } from './shared/model.js';
 
 const settings = { ...DEFAULT_SETTINGS, templateAnchorMonday: '2026-06-08' };
@@ -67,5 +67,37 @@ const flags = sfeReimbursementFlags(
 );
 assert.equal(flags.length, 1);
 assert.equal(flags[0].eligible, true);
+
+// Fit-note / return-to-work flags.
+const asOf = '2026-06-10';
+const sickRec = (over) => ({ id: 's1', staffId: 'gp1', type: 'sick', status: 'approved', ...over });
+
+// Ongoing >7 days, no fit note -> high.
+let ff = fitNoteFlags([sickRec({ startDate: '2026-06-01', endDate: '2026-06-20' })], [gp], asOf);
+assert.equal(ff.length, 1);
+assert.equal(ff[0].severity, 'high');
+assert.ok(/no fit note/.test(ff[0].message));
+
+// Within self-certification window -> no flag.
+ff = fitNoteFlags([sickRec({ startDate: '2026-06-08', endDate: '2026-06-20' })], [gp], asOf);
+assert.equal(ff.length, 0);
+
+// Fit note expired while still off -> high; expiring within 7 days -> medium.
+ff = fitNoteFlags([sickRec({ startDate: '2026-05-20', endDate: '2026-06-20', fitNoteUntil: '2026-06-08' })], [gp], asOf);
+assert.equal(ff[0].severity, 'high');
+ff = fitNoteFlags([sickRec({ startDate: '2026-05-20', endDate: '2026-06-20', fitNoteUntil: '2026-06-15' })], [gp], asOf);
+assert.equal(ff[0].severity, 'medium');
+
+// Valid fit note covering ahead -> no flag.
+ff = fitNoteFlags([sickRec({ startDate: '2026-05-20', endDate: '2026-06-20', fitNoteUntil: '2026-07-01' })], [gp], asOf);
+assert.equal(ff.length, 0);
+
+// Ended episode without RTW -> medium; with RTW or older than 30 days -> none.
+ff = fitNoteFlags([sickRec({ startDate: '2026-06-01', endDate: '2026-06-03' })], [gp], asOf);
+assert.ok(/return-to-work/.test(ff[0].message));
+ff = fitNoteFlags([sickRec({ startDate: '2026-06-01', endDate: '2026-06-03', rtwDone: true })], [gp], asOf);
+assert.equal(ff.length, 0);
+ff = fitNoteFlags([sickRec({ startDate: '2026-04-01', endDate: '2026-04-03' })], [gp], asOf);
+assert.equal(ff.length, 0);
 
 console.log('test-leave: OK');

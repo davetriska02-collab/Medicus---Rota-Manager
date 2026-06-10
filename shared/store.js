@@ -8,6 +8,7 @@ const KEYS = {
   staff: 'rota.staff',
   entries: 'rota.entries',
   leave: 'rota.leave',
+  rooms: 'rota.rooms',
   settings: 'rota.settings'
 };
 
@@ -45,6 +46,7 @@ export async function loadAll() {
     staff: got[KEYS.staff] || [],
     entries: got[KEYS.entries] || [],
     leave: got[KEYS.leave] || [],
+    rooms: got[KEYS.rooms] || [],
     settings: { ...DEFAULT_SETTINGS, ...(got[KEYS.settings] || {}) }
   };
 }
@@ -70,6 +72,7 @@ export async function exportEnvelope() {
       staff: data.staff,
       entries: data.entries,
       leave: data.leave,
+      rooms: data.rooms,
       settings: data.settings
     }
   };
@@ -83,6 +86,7 @@ export async function importEnvelope(envelope) {
   if (Array.isArray(s.staff)) await save('staff', s.staff);
   if (Array.isArray(s.entries)) await save('entries', s.entries);
   if (Array.isArray(s.leave)) await save('leave', s.leave);
+  if (Array.isArray(s.rooms)) await save('rooms', s.rooms);
   if (s.settings && typeof s.settings === 'object') {
     await save('settings', { ...DEFAULT_SETTINGS, ...s.settings });
   }

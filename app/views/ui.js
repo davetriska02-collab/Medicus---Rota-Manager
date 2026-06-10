@@ -20,12 +20,13 @@ export function staffLabel(person) {
   return `<span class="dot" style="background:${esc(person.colour)}"></span>${esc(person.name)}<span class="roletag">${esc(extra)}</span>`;
 }
 
-export function typeChip(typeId, status) {
+export function typeChip(typeId, status, extraTitle = '') {
   const t = typeById(typeId);
   if (!t) return '<span class="empty">·</span>';
-  if (status === 'vacancy') return `<span class="chip vacancy" title="Needs cover">${esc(t.short)}!</span>`;
+  const extra = extraTitle ? ` — ${extraTitle}` : '';
+  if (status === 'vacancy') return `<span class="chip vacancy" title="${esc(`Needs cover${extra}`)}">${esc(t.short)}!</span>`;
   const covered = status === 'covered' ? ' covered' : '';
-  const title = status === 'covered' ? `${t.name} — covered (locum)` : t.name;
+  const title = (status === 'covered' ? `${t.name} — covered (locum)` : t.name) + extra;
   return `<span class="chip${covered}" style="background:${esc(t.colour)}" title="${esc(title)}">${esc(t.short)}</span>`;
 }
 

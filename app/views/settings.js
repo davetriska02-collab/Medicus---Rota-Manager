@@ -4,7 +4,7 @@
 import { esc } from '../../shared/esc.js';
 import { DAY_KEYS, DEFAULT_SETTINGS } from '../../shared/model.js';
 import { isValidPracticeCode } from '../../shared/medicus-api.js';
-import { exportEnvelope, importEnvelope, wipe, save } from '../../shared/store.js';
+import { exportEnvelope, importEnvelope, wipe, save, uid } from '../../shared/store.js';
 import { demoData } from '../../shared/demo.js';
 import { download } from './ui.js';
 
@@ -45,8 +45,24 @@ export default {
           <label class="field">Max simultaneous leave — nursing<input id="s-maxnur" type="number" min="0" value="${esc(String(s.maxSimultaneousLeave.nursing))}"></label>
           <label class="field">Max simultaneous leave — ARRS<input id="s-maxarrs" type="number" min="0" value="${esc(String(s.maxSimultaneousLeave.arrs))}"></label>
           <label class="field">Max simultaneous leave — non-clinical<input id="s-maxnon" type="number" min="0" value="${esc(String(s.maxSimultaneousLeave.nonclinical))}"></label>
+          <label class="field">Bradford Factor — monitor at<input id="s-bfmon" type="number" min="0" value="${esc(String(s.bradfordThresholds.monitor))}"></label>
+          <label class="field">Bradford Factor — high at<input id="s-bfhigh" type="number" min="0" value="${esc(String(s.bradfordThresholds.high))}"></label>
+          <label class="field">Bradford Factor — severe at<input id="s-bfsev" type="number" min="0" value="${esc(String(s.bradfordThresholds.severe))}"></label>
         </div>
         <button id="s-save" class="primary" style="margin-top:8px">Save settings</button>
+      </div>
+
+      <div class="card">
+        <h2 class="mt0">Rooms</h2>
+        ${(state.rooms || []).map((r) => `
+          <div class="toolbar" style="margin-bottom:4px">
+            <span>${esc(r.name)}</span><span class="spacer"></span>
+            <button class="small danger" data-delroom="${esc(r.id)}">Remove</button>
+          </div>`).join('') || '<div class="sub" style="margin-bottom:8px">No rooms yet — add consulting/treatment rooms to assign them on the rota and catch double-bookings.</div>'}
+        <div class="toolbar">
+          <input id="s-newroom" placeholder="e.g. Room 3 / Treatment 1" style="width:220px">
+          <button id="s-addroom">Add room</button>
+        </div>
       </div>
 
       <div class="card">
@@ -82,10 +98,31 @@ export default {
         arrs: Number(root.querySelector('#s-maxarrs').value) || 0,
         nonclinical: Number(root.querySelector('#s-maxnon').value) || 0
       };
+      s.bradfordThresholds = {
+        monitor: Number(root.querySelector('#s-bfmon').value) || 0,
+        high: Number(root.querySelector('#s-bfhigh').value) || 0,
+        severe: Number(root.querySelector('#s-bfsev').value) || 0
+      };
       await ctx.persist('settings');
       ctx.toast('Settings saved');
       ctx.rerender();
     };
+
+    root.querySelector('#s-addroom').onclick = async () => {
+      const name = root.querySelector('#s-newroom').value.trim();
+      if (!name) return;
+      state.rooms = [...(state.rooms || []), { id: uid(), name }];
+      await ctx.persist('rooms');
+      ctx.rerender();
+    };
+    root.querySelectorAll('[data-delroom]').forEach((btn) => {
+      btn.onclick = async () => {
+        state.rooms = state.rooms.filter((r) => r.id !== btn.dataset.delroom);
+        state.entries = state.entries.map((e) => (e.roomId === btn.dataset.delroom ? { ...e, roomId: null } : e));
+        await ctx.persist('rooms', 'entries');
+        ctx.rerender();
+      };
+    });
 
     root.querySelector('#s-export').onclick = async () => {
       const env = await exportEnvelope();
@@ -111,6 +148,7 @@ export default {
       await save('staff', demo.staff);
       await save('entries', demo.entries);
       await save('leave', demo.leave);
+      await save('rooms', demo.rooms);
       await save('settings', demo.settings);
       await ctx.reload();
       ctx.toast('Demo practice loaded — try “Generate from templates” on the Rota page');

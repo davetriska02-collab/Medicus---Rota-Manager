@@ -22,7 +22,7 @@ function rosteredOn(entries, staff, leaveList, date, period) {
     .filter((x) => x.person && !approvedLeaveFor(leaveList, x.person.id, date));
 }
 
-export function checkWeek({ dates, entries, staff, leaveList, settings }) {
+export function checkWeek({ dates, entries, staff, leaveList, settings, rooms = [] }) {
   const warnings = [];
   const weekEntries = entries.filter((e) => dates.includes(e.date));
 
@@ -78,6 +78,24 @@ export function checkWeek({ dates, entries, staff, leaveList, settings }) {
     warnings.push({
       severity: 'medium', kind: 'vacancy', date: e.date, period: e.period, staffId: e.staffId,
       message: `${fmtDay(e.date)} ${e.period.toUpperCase()}: ${t ? t.name : e.typeId} session needs cover${person ? ` (was ${person.name})` : ''}${e.note ? ` — ${e.note}` : ''}`
+    });
+  }
+
+  // Room clashes: two active sessions in the same room at the same time.
+  const byRoom = {};
+  for (const e of weekEntries.filter(ACTIVE)) {
+    if (!e.roomId) continue;
+    const key = `${e.date}|${e.period}|${e.roomId}`;
+    (byRoom[key] ||= []).push(e);
+  }
+  for (const [key, list] of Object.entries(byRoom)) {
+    if (list.length < 2) continue;
+    const [date, period, roomId] = key.split('|');
+    const room = rooms.find((r) => r.id === roomId);
+    const names = list.map((e) => (staff.find((s) => s.id === e.staffId) || {}).name).filter(Boolean);
+    warnings.push({
+      severity: 'medium', kind: 'room', date, period,
+      message: `${fmtDay(date)} ${period.toUpperCase()}: ${room ? room.name : 'room'} double-booked (${names.join(', ')})`
     });
   }
 
