@@ -5,9 +5,10 @@
 
 import { esc } from '../../shared/esc.js';
 import { weekDates, dayKey, fmtDay, addDays, mondayOf, todayISO } from '../../shared/time.js';
-import { SESSION_TYPES, typeById } from '../../shared/model.js';
+import { SESSION_TYPES, typeById, periodsFor, PERIOD_INFO } from '../../shared/model.js';
 import { uid } from '../../shared/store.js';
-import { checkWeek, capacitySummary, dutyFairness } from '../../engine/rules.js';
+import { checkWeek, capacitySummary, dutyFairness, eaSummary } from '../../engine/rules.js';
+import { fillRooms } from '../../engine/room-infer.js';
 import { generateEntries } from '../../engine/template.js';
 import { autoAssignDuty, applyDutyChanges } from '../../engine/fairness.js';
 import { solveRota } from '../../engine/solver.js';
@@ -168,6 +169,7 @@ export default {
       warnings.push({ severity: 'info', kind: 'fairness', message: `Duty fairness: ${f.name} carries ${f.dutyCount} duty sessions in the last 8 weeks — well above the pro-rata practice average` });
     }
     const high = warnings.filter((w) => w.severity === 'high').length;
+    const ea = eaSummary({ dates, entries: state.entries, staff: state.staff, leaveList: state.leave, settings: s });
 
     root.innerHTML = `
       <h1>Rota</h1>
@@ -188,6 +190,7 @@ export default {
         <span class="spacer"></span>
         <button id="undobtn" ${undoStack.length ? '' : 'disabled'} title="Ctrl+Z">↶ Undo</button>
         <button id="copyweek" title="Copy last week's sessions into empty cells this week">Copy previous week</button>
+        ${rooms.length ? '<button id="fillrooms" title="Give each clinic session its owner\'s usual room, avoiding clashes">Assign rooms</button>' : ''}
         <select id="genweeks">
           ${[1, 2, 4, 6, 8, 12].map((n) => `<option value="${n}">${n} week${n > 1 ? 's' : ''}</option>`).join('')}
         </select>
@@ -221,6 +224,7 @@ export default {
         <div class="sub" style="margin-bottom:8px">
           Capacity: ${cap.gpClinicalSessions} GP clinical sessions ≈ ${cap.estimated} appointments vs benchmark ${cap.target}
           (${esc(String(s.accessBenchmarkPer1000))}/1,000 × ${Number(s.listSize).toLocaleString()} patients)
+          ${ea ? `<br>Enhanced access: ${ea.minutes} min this week vs DES requirement ${ea.target} min (60 min/1,000/week)` : ''}
         </div>
         ${warnHTML(warnings)}
       </div>
@@ -239,6 +243,19 @@ export default {
     if (siteSel) siteSel.onchange = () => { state.ui.siteFilter = siteSel.value; ctx.rerender(); };
     root.querySelector('#printbtn').onclick = () => window.print();
     root.querySelector('#undobtn').onclick = () => undo(ctx);
+
+    const fillBtn = root.querySelector('#fillrooms');
+    if (fillBtn) fillBtn.onclick = async () => {
+      const updates = fillRooms({ dates, entries: state.entries, staff: state.staff, rooms, typeById });
+      if (!updates.length) { ctx.toast('Nothing to assign — every clinic session already has a room (or no rooms are free)'); return; }
+      pushUndo(state);
+      const byId = Object.fromEntries(updates.map((u) => [u.entryId, u.roomId]));
+      state.entries = state.entries.map((e) => (byId[e.id] ? { ...e, roomId: byId[e.id] } : e));
+      await ctx.persist('entries');
+      await ctx.log(`Assigned rooms to ${updates.length} session(s) this week`);
+      ctx.toast(`${updates.length} session(s) given rooms — check the Rooms view`);
+      ctx.rerender();
+    };
 
     root.querySelector('#copyweek').onclick = async () => {
       const prevDates = weekDates(addDays(state.weekMonday, -7));
@@ -525,15 +542,16 @@ export default {
 function staffGrid(state, people, showDates, dates, today, selected) {
   const s = state.settings;
   const bh = s.bankHolidays || [];
+  const P = periodsFor(s);
   return `
     <table class="rota">
       <thead>
         <tr>
           <th rowspan="2">Staff</th>
-          ${showDates.map((d) => `<th colspan="2" class="day${d === today ? ' today' : ''}">${esc(fmtDay(d))}${bh.includes(d) ? ' <span class="pill requested">BH</span>' : ''}</th>`).join('')}
+          ${showDates.map((d) => `<th colspan="${P.length}" class="day${d === today ? ' today' : ''}">${esc(fmtDay(d))}${bh.includes(d) ? ' <span class="pill requested">BH</span>' : ''}</th>`).join('')}
           <th rowspan="2" title="Sessions rostered this week / contracted per week">Σ</th>
         </tr>
-        <tr>${showDates.map((d) => `<th class="${d === today ? 'today' : ''}">AM</th><th class="${d === today ? 'today' : ''}">PM</th>`).join('')}</tr>
+        <tr>${showDates.map((d) => P.map((p) => `<th class="${d === today ? 'today' : ''}">${PERIOD_INFO[p].label}</th>`).join('')).join('')}</tr>
       </thead>
       <tbody>
         ${people.map((p) => {
@@ -546,7 +564,7 @@ function staffGrid(state, people, showDates, dates, today, selected) {
             <td class="staffname">${staffLabel(p)}</td>
             ${showDates.map((d) => {
               const onLeave = approvedLeaveFor(state.leave, p.id, d);
-              return ['am', 'pm'].map((period) => {
+              return P.map((period) => {
                 const entry = state.entries.find((e) => e.staffId === p.id && e.date === d && e.period === period);
                 const room = entry && entry.roomId ? (state.rooms || []).find((r) => r.id === entry.roomId) : null;
                 const extra = entry ? [room && room.name, entry.note].filter(Boolean).join(' — ') : '';
@@ -572,7 +590,7 @@ function staffGrid(state, people, showDates, dates, today, selected) {
       <tfoot>
         <tr>
           <th>Clinical on site</th>
-          ${showDates.map((d) => ['am', 'pm'].map((period) => {
+          ${showDates.map((d) => P.map((period) => {
             const present = state.entries.filter((e) => {
               if (e.date !== d || e.period !== period) return false;
               if (!ACTIVE.includes(e.status)) return false;
@@ -597,6 +615,7 @@ function staffGrid(state, people, showDates, dates, today, selected) {
 
 /* ---- rooms × day pivot ---- */
 function roomGrid(state, rooms, showDates, today) {
+  const P = periodsFor(state.settings);
   const rows = [...rooms, { id: null, name: 'Unassigned' }];
   const occupants = (roomId, date, period) =>
     state.entries.filter((e) => {
@@ -610,15 +629,15 @@ function roomGrid(state, rooms, showDates, today) {
       <thead>
         <tr>
           <th rowspan="2">Room</th>
-          ${showDates.map((d) => `<th colspan="2" class="day${d === today ? ' today' : ''}">${esc(fmtDay(d))}</th>`).join('')}
+          ${showDates.map((d) => `<th colspan="${P.length}" class="day${d === today ? ' today' : ''}">${esc(fmtDay(d))}</th>`).join('')}
         </tr>
-        <tr>${showDates.map((d) => `<th class="${d === today ? 'today' : ''}">AM</th><th class="${d === today ? 'today' : ''}">PM</th>`).join('')}</tr>
+        <tr>${showDates.map((d) => P.map((p) => `<th class="${d === today ? 'today' : ''}">${PERIOD_INFO[p].label}</th>`).join('')).join('')}</tr>
       </thead>
       <tbody>
         ${rows.map((room) => `
           <tr>
             <td class="staffname">${esc(room.name)}</td>
-            ${showDates.map((d) => ['am', 'pm'].map((period) => {
+            ${showDates.map((d) => P.map((period) => {
               const here = occupants(room.id, d, period);
               const chips = here.map((e) => {
                 const person = state.staff.find((p) => p.id === e.staffId);

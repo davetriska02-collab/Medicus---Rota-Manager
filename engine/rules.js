@@ -10,7 +10,7 @@
 // All warnings, no hard blocks — guidance, not regulation.
 
 import { dayKey, fmtDay } from '../shared/time.js';
-import { typeById, roleById, canSupervise } from '../shared/model.js';
+import { typeById, roleById, canSupervise, periodsFor, PERIOD_INFO } from '../shared/model.js';
 import { approvedLeaveFor } from './leave.js';
 
 const ACTIVE = (e) => e.status === 'planned' || e.status === 'confirmed' || e.status === 'covered';
@@ -32,25 +32,38 @@ export function checkWeek({ dates, entries, staff, leaveList, settings, rooms = 
   for (const date of dates) {
     if (!settings.openDays.includes(dayKey(date))) continue;
     if (bankHolidays.includes(date)) continue; // closed — no cover required
-    for (const period of ['am', 'pm']) {
+    for (const period of periodsFor(settings)) {
       const present = rosteredOn(weekEntries, staff, leaveList, date, period);
 
-      // 1. Duty cover — per site when the practice runs more than one.
-      const required = (settings.dutyRequired || {})[period] ?? 1;
-      const siteGroups = sites.length > 1 ? sites : [null];
-      for (const site of siteGroups) {
-        const pool = site ? present.filter((x) => (x.person.site || sites[0]) === site) : present;
-        const duty = pool.filter((x) => x.entry.typeId === 'duty' && x.person.dutyEligible);
-        if (duty.length < required) {
-          warnings.push({
-            severity: 'high', kind: 'duty', date, period,
-            message: `${fmtDay(date)} ${period.toUpperCase()}${site ? ` (${site})` : ''}: no duty doctor rostered (${duty.length}/${required})`
-          });
+      // 1. Duty cover — core hours (AM/PM) only, per site when the
+      // practice runs more than one.
+      if (period === 'am' || period === 'pm') {
+        const required = (settings.dutyRequired || {})[period] ?? 1;
+        const siteGroups = sites.length > 1 ? sites : [null];
+        for (const site of siteGroups) {
+          const pool = site ? present.filter((x) => (x.person.site || sites[0]) === site) : present;
+          const duty = pool.filter((x) => x.entry.typeId === 'duty' && x.person.dutyEligible);
+          if (duty.length < required) {
+            warnings.push({
+              severity: 'high', kind: 'duty', date, period,
+              message: `${fmtDay(date)} ${period.toUpperCase()}${site ? ` (${site})` : ''}: no duty doctor rostered (${duty.length}/${required})`
+            });
+          }
         }
       }
 
-      // Enhanced access sessions need a GP physically present.
-      const enhanced = present.filter((x) => x.entry.typeId === 'enhanced');
+      // Extended-access periods need a GP physically present (DES rule).
+      if ((period === 'early' || period === 'eve') && present.length && !present.some((x) => x.person.role === 'gp')) {
+        warnings.push({
+          severity: 'medium', kind: 'enhanced', date, period,
+          message: `${fmtDay(date)} ${PERIOD_INFO[period].label}: extended-access sessions running with no GP rostered — a GP must be physically present throughout`
+        });
+      }
+
+      // Enhanced access sessions inside core hours need a GP physically
+      // present (early/eve periods are covered by the check above).
+      const enhanced = (period === 'am' || period === 'pm')
+        ? present.filter((x) => x.entry.typeId === 'enhanced') : [];
       if (enhanced.length && !enhanced.some((x) => x.person.role === 'gp')) {
         warnings.push({
           severity: 'medium', kind: 'enhanced', date, period,
@@ -160,6 +173,24 @@ export function capacitySummary({ dates, entries, staff, leaveList, settings }) 
   const estimated = Math.round(gpClinicalSessions * (settings.apptsPerSurgerySession || 15));
   const target = Math.round(((settings.listSize || 0) / 1000) * (settings.accessBenchmarkPer1000 || 72));
   return { gpClinicalSessions, estimated, target };
+}
+
+// Enhanced Access DES: 60 minutes of appointments per 1,000 patients per
+// week, delivered in the extended periods (EARLY 60 min, EVE 90 min).
+export function eaSummary({ dates, entries, staff, leaveList, settings }) {
+  const extra = settings.extraPeriods || {};
+  if (!extra.early && !extra.eve) return null;
+  let minutes = 0;
+  for (const e of entries.filter((x) => dates.includes(x.date) && ACTIVE(x))) {
+    if (e.period !== 'early' && e.period !== 'eve') continue;
+    const t = typeById(e.typeId);
+    const person = staff.find((s) => s.id === e.staffId);
+    if (!t || !t.clinical || !person) continue;
+    if (approvedLeaveFor(leaveList, person.id, e.date)) continue;
+    minutes += PERIOD_INFO[e.period].minutes;
+  }
+  const target = Math.round(((settings.listSize || 0) / 1000) * 60);
+  return { minutes, target };
 }
 
 // 6. Duty fairness over a history window: each duty-eligible GP's duty count

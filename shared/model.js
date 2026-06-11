@@ -4,6 +4,21 @@
 export const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 export const PERIODS = ['am', 'pm'];
 
+// Optional extended-access periods around core hours. Duty-doctor rules
+// apply to core AM/PM only; everything else (supervision, rooms, EA
+// minutes) spans whatever periods the practice runs.
+export const PERIOD_INFO = {
+  early: { label: 'EARLY', start: '07:00', minutes: 60 },
+  am:    { label: 'AM',    start: '08:00', minutes: 250 },
+  pm:    { label: 'PM',    start: '13:00', minutes: 250 },
+  eve:   { label: 'EVE',   start: '18:30', minutes: 90 }
+};
+
+export function periodsFor(settings) {
+  const extra = (settings && settings.extraPeriods) || {};
+  return [...(extra.early ? ['early'] : []), 'am', 'pm', ...(extra.eve ? ['eve'] : [])];
+}
+
 export const SESSION_TYPES = [
   { id: 'surgery',  name: 'Surgery',                short: 'SUR',  colour: '#3b82f6', clinical: true,  buildsClinic: true },
   { id: 'triage',   name: 'Telephone triage',       short: 'TRI',  colour: '#06b6d4', clinical: true,  buildsClinic: true },
@@ -56,7 +71,7 @@ const PALETTE = ['#2563eb', '#0d9488', '#d97706', '#7c3aed', '#db2777', '#059669
 
 export function blankPattern(weeks) {
   return Array.from({ length: weeks }, () =>
-    Object.fromEntries(DAY_KEYS.map((d) => [d, { am: null, pm: null }]))
+    Object.fromEntries(DAY_KEYS.map((d) => [d, { early: null, am: null, pm: null, eve: null }]))
   );
 }
 
@@ -75,6 +90,7 @@ export function newStaff(seed = {}) {
     pattern: blankPattern(1),
     medicusName: '', // exact name as it appears in the Medicus appointment book
     site: '', // optional, one of settings.sites
+    usualRoomId: null, // preferred consulting room (inferable from Medicus concurrency)
     vtsDay: '', // registrars: immovable VTS half-day, e.g. 'tue-pm'
     avoidDuty: [], // 'mon-am'-style keys — solver applies preference penalty
     colour: PALETTE[Math.floor(Math.random() * PALETTE.length)],
@@ -121,6 +137,7 @@ export const DEFAULT_SETTINGS = {
   // Registrars count as reduced capacity: longer appointments, 70/30 split.
   registrarWeights: { early: 0.5, st3: 0.75 },
   sites: [], // optional: multi-site practices get per-site duty checks
+  extraPeriods: { early: false, eve: false }, // enhanced-access columns around core hours
   // England & Wales bank holidays (editable in Settings).
   bankHolidays: [
     '2026-01-01', '2026-04-03', '2026-04-06', '2026-05-04', '2026-05-25', '2026-08-31', '2026-12-25', '2026-12-28',

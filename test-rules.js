@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { checkWeek, capacitySummary, dutyFairness } from './engine/rules.js';
+import { checkWeek, capacitySummary, dutyFairness, eaSummary } from './engine/rules.js';
 import { newStaff, DEFAULT_SETTINGS } from './shared/model.js';
 import { weekDates } from './shared/time.js';
 
@@ -143,5 +143,24 @@ const hist = [
 const fair = dutyFairness({ entries: hist, staff: [gpBig, gpSmall] });
 assert.equal(fair.flagged.length, 1);
 assert.equal(fair.flagged[0].staffId, 'g4');
+
+// Enhanced access periods: eaSummary counts EARLY (60) + EVE (90) minutes
+// vs the 60/1,000/week DES target; null when extended periods are off.
+assert.equal(eaSummary({ dates, entries: [], staff: [], leaveList: [], settings }), null);
+const eaSettings = { ...settings, listSize: 10000, extraPeriods: { early: true, eve: true } };
+const ea = eaSummary({
+  dates, staff: [partner], leaveList: [], settings: eaSettings,
+  entries: [e('p1', '2026-06-08', 'early', 'enhanced'), e('p1', '2026-06-08', 'eve', 'enhanced'), e('p1', '2026-06-09', 'eve', 'enhanced')]
+});
+assert.equal(ea.minutes, 60 + 90 + 90);
+assert.equal(ea.target, 600);
+
+// Extended-access slot running with no GP -> warning; duty never required there.
+w = checkWeek({
+  dates, staff: [hca, partner], leaveList: [], settings: eaSettings,
+  entries: [e('h1', '2026-06-08', 'eve', 'enhanced'), e('p1', '2026-06-08', 'am', 'duty'), e('p1', '2026-06-08', 'pm', 'duty')]
+});
+assert.equal(w.filter((x) => x.kind === 'enhanced' && x.period === 'eve').length, 1);
+assert.equal(w.filter((x) => x.kind === 'duty').length, 0);
 
 console.log('test-rules: OK');

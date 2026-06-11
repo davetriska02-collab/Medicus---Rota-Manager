@@ -36,7 +36,7 @@ export default {
           ${state.staff.length ? '' : '<tr><td colspan="7" class="muted">No staff yet. Add people here, or import clinicians from the Medicus appointment book via Live sync, or load demo data from Settings.</td></tr>'}
         </tbody>
       </table>
-      ${editing ? form(editing, editingId === 'new', state.settings.sites || []) : ''}
+      ${editing ? form(editing, editingId === 'new', state.settings.sites || [], state.rooms || []) : ''}
     `;
 
     root.querySelector('#add').onclick = () => {
@@ -78,6 +78,7 @@ export default {
       person.entitlement = { annual: Number(val('f-al').value) || 0, study: Number(val('f-sl').value) || 0 };
       person.medicusName = val('f-medicus').value.trim();
       person.site = val('f-site').value;
+      person.usualRoomId = val('f-room').value || null;
       person.vtsDay = person.employmentType === 'registrar' ? val('f-vts').value : '';
       person.avoidDuty = [...val('f-avoidduty').selectedOptions].map((o) => o.value);
       person.colour = val('f-colour').value;
@@ -111,7 +112,7 @@ export default {
   }
 };
 
-function form(p, isNew, sites) {
+function form(p, isNew, sites, rooms) {
   return `
     <div class="card" id="staffform">
       <h2 class="mt0">${isNew ? 'New staff member' : `Edit — ${esc(p.name)}`}</h2>
@@ -133,6 +134,12 @@ function form(p, isNew, sites) {
         <label class="field">Annual leave (sessions/yr)<input id="f-al" type="number" min="0" value="${esc(String(p.entitlement.annual))}"></label>
         <label class="field">Study leave (sessions/yr)<input id="f-sl" type="number" min="0" value="${esc(String(p.entitlement.study))}"></label>
         <label class="field">Name in Medicus appointment book<input id="f-medicus" value="${esc(p.medicusName)}" placeholder="exactly as Medicus shows it"></label>
+        <label class="field">Usual room
+          <select id="f-room">
+            <option value="">—</option>
+            ${rooms.map((r) => `<option value="${esc(r.id)}" ${p.usualRoomId === r.id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}
+          </select>
+        </label>
         <label class="field">Site
           <select id="f-site">
             <option value="">—</option>

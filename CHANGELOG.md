@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.6.0 — 2026-06-10
+
+Enhanced-access periods and automatic room inference.
+
+- **EARLY (07:00–08:00) and EVE (18:30–20:00) periods**, toggled in Settings: extra columns on
+  the rota grid, rooms view and pattern templates; ICS export times; supervision/HCA/room rules
+  apply across all periods while duty-doctor requirements stay core-hours (AM/PM). Extended
+  slots running without a GP rostered are flagged (DES "GP physically present" rule).
+- **Enhanced Access DES arithmetic** on the rota checks panel: minutes provided this week
+  (EARLY 60 + EVE 90 per session) vs the required 60 min/1,000 patients/week.
+- **Room inference** (`engine/room-infer.js`): reads 4 weeks of appointment-book history,
+  takes the peak number of clinicians consulting face-to-face at once as the room count
+  (remote/telephone sessions excluded via deliveryMode), and greedy-colours the overlap graph
+  so every clinician gets a stable usual room that never clashes. Settings → Rooms →
+  "Suggest from Medicus" (or sample data) → preview → one-click apply creates the rooms and
+  pins each person's usual room.
+- **Assign rooms** button on the Rota page: fills every clinic session this week with its
+  owner's usual room, spilling to the lowest free room on clashes — never double-books,
+  leaves sessions unassigned (and warned) when rooms run out. Undoable and audited.
+- Staff editor gains a "Usual room" field; `parseOverview` now counts face-to-face bookings.
+
 ## 1.5.0 — 2026-06-10
 
 The auto-rota solver.

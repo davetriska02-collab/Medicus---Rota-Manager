@@ -4,7 +4,7 @@
 // session it punches out.
 
 import { datesInRange, dayKey, leaveYearStart, templateWeekIndex, diffDays, todayISO, addDays } from '../shared/time.js';
-import { roleById, typeById, leaveTypeById } from '../shared/model.js';
+import { roleById, typeById, leaveTypeById, periodsFor } from '../shared/model.js';
 
 export function approvedLeaveFor(leaveList, staffId, dateISO) {
   return leaveList.find(
@@ -26,7 +26,7 @@ export function sessionsInRange(staffMember, startISO, endISO, entries, settings
   let count = 0;
   for (const date of datesInRange(startISO, endISO)) {
     if (bankHolidays.includes(date)) continue; // closed days cost nothing
-    for (const period of ['am', 'pm']) {
+    for (const period of periodsFor(settings)) {
       const entry = entries.find(
         (e) => e.staffId === staffMember.id && e.date === date && e.period === period && e.status !== 'cancelled'
       );
@@ -126,7 +126,7 @@ export function checkLeaveRequest(req, { staff, leaveList, entries, settings }) 
 
   // Coverage impact: duty sessions and registrar supervision this person provides.
   for (const date of datesInRange(req.startDate, req.endDate)) {
-    for (const period of ['am', 'pm']) {
+    for (const period of periodsFor(settings)) {
       const entry = entries.find(
         (e) => e.staffId === person.id && e.date === date && e.period === period && e.status !== 'cancelled' && e.status !== 'vacancy'
       );

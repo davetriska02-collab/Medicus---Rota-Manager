@@ -19,8 +19,8 @@ export function parseOverview(payload) {
   for (const sched of (payload && payload.staffSchedules) || []) {
     const row = {
       name: String(sched.name || '').trim(),
-      am: { hasSession: false, slots: 0, booked: 0 },
-      pm: { hasSession: false, slots: 0, booked: 0 }
+      am: { hasSession: false, slots: 0, booked: 0, f2f: 0 },
+      pm: { hasSession: false, slots: 0, booked: 0, f2f: 0 }
     };
     for (const block of sched.schedule || []) {
       if (block && block.summary && block.summary.status && block.summary.status.isCancelled) continue;
@@ -35,7 +35,12 @@ export function parseOverview(payload) {
           row[period].slots += 1;
         } else if (kind === 'appointment') {
           const status = entry.displayStatus && entry.displayStatus.value;
-          if (status !== 'cancelled') row[period].booked += 1;
+          if (status !== 'cancelled') {
+            row[period].booked += 1;
+            // Face-to-face needs a physical room; remote/telephone doesn't.
+            const mode = entry.deliveryMode && entry.deliveryMode.value;
+            if (mode !== 'remote' && mode !== 'telephone') row[period].f2f += 1;
+          }
         }
       }
     }

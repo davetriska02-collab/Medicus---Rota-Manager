@@ -4,7 +4,12 @@
 
 import { typeById } from '../shared/model.js';
 
-const PERIOD_TIMES = { am: ['080000', '130000'], pm: ['130000', '183000'] };
+const PERIOD_TIMES = {
+  early: ['070000', '080000'],
+  am: ['080000', '130000'],
+  pm: ['130000', '183000'],
+  eve: ['183000', '200000']
+};
 const EXPORTABLE = ['planned', 'confirmed', 'covered'];
 
 function icsEscape(s) {

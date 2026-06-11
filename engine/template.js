@@ -4,7 +4,7 @@
 // manual edits and prior generations win.
 
 import { datesInRange, dayKey, templateWeekIndex } from '../shared/time.js';
-import { typeById, canSupervise } from '../shared/model.js';
+import { typeById, canSupervise, periodsFor } from '../shared/model.js';
 import { approvedLeaveFor } from './leave.js';
 import { uid } from '../shared/store.js';
 
@@ -22,7 +22,7 @@ export function generateEntries({ staff, startDate, endDate, existingEntries, le
       const week = pattern[templateWeekIndex(anchor, date, pattern.length)];
       const day = week && week[dayKey(date)];
       if (!day) continue;
-      for (const period of ['am', 'pm']) {
+      for (const period of periodsFor(settings)) {
         const typeId = day[period];
         if (!typeId || !typeById(typeId)) continue;
         if (existing.has(`${person.id}|${date}|${period}`)) continue;

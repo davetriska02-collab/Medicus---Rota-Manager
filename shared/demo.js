@@ -82,6 +82,7 @@ export function demoData() {
   const settings = {
     ...DEFAULT_SETTINGS,
     listSize: 10400,
+    extraPeriods: { early: false, eve: true }, // show the EVE column off the bat
     templateAnchorMonday: monday
   };
 

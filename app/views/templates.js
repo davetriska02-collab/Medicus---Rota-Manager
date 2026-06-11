@@ -2,7 +2,7 @@
 // pattern. The rota view rolls these forward into real entries.
 
 import { esc } from '../../shared/esc.js';
-import { SESSION_TYPES, DAY_KEYS, blankPattern } from '../../shared/model.js';
+import { SESSION_TYPES, DAY_KEYS, blankPattern, periodsFor, PERIOD_INFO } from '../../shared/model.js';
 import { addDays, mondayOf, todayISO, dayKey } from '../../shared/time.js';
 import { isValidPracticeCode, fetchOverviewRange } from '../../shared/medicus-api.js';
 import { parseOverview } from '../../engine/reconcile.js';
@@ -35,7 +35,7 @@ export default {
           <button id="save" class="primary">Save pattern</button>
         ` : ''}
       </div>
-      ${person ? pattern(person) : '<div class="muted card">Add staff first.</div>'}
+      ${person ? pattern(person, state.settings) : '<div class="muted card">Add staff first.</div>'}
 
       <div class="card">
         <h2 class="mt0">Auto-infer patterns from the appointment book</h2>
@@ -154,17 +154,18 @@ function wireInference(root, ctx) {
   });
 }
 
-function pattern(person) {
+function pattern(person, settings) {
   const weeks = person.pattern || [];
+  const P = periodsFor(settings);
   return weeks.map((week, wi) => `
     <div class="card">
       <h2 class="mt0">${weeks.length > 1 ? `Week ${wi + 1}` : 'Every week'}</h2>
       <table>
         <thead><tr><th></th>${DAY_KEYS.map((d) => `<th>${DAY_LABELS[d]}</th>`).join('')}</tr></thead>
         <tbody>
-          ${['am', 'pm'].map((period) => `
+          ${P.map((period) => `
             <tr>
-              <th>${period.toUpperCase()}</th>
+              <th>${PERIOD_INFO[period].label}</th>
               ${DAY_KEYS.map((day) => `
                 <td>
                   <select class="cellpick" data-week="${wi}" data-day="${day}" data-period="${period}">

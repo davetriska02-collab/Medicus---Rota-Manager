@@ -6,8 +6,12 @@ import { DAY_KEYS, DEFAULT_SETTINGS } from '../../shared/model.js';
 import { isValidPracticeCode } from '../../shared/medicus-api.js';
 import { exportEnvelope, importEnvelope, wipe, save, uid } from '../../shared/store.js';
 import { demoData } from '../../shared/demo.js';
-import { mondayOf, todayISO, addDays } from '../../shared/time.js';
+import { mondayOf, todayISO, addDays, dayKey } from '../../shared/time.js';
 import { buildEvidenceReport } from '../../engine/evidence.js';
+import { fetchOverviewRange } from '../../shared/medicus-api.js';
+import { parseOverview } from '../../engine/reconcile.js';
+import { inferRooms } from '../../engine/room-infer.js';
+import { demoOverviewPayload } from '../../shared/demo.js';
 import { download } from './ui.js';
 
 export default {
@@ -62,6 +66,12 @@ export default {
           <strong>Open days:</strong>
           ${DAY_KEYS.map((d) => `<label class="check"><input type="checkbox" class="s-day" value="${d}" ${s.openDays.includes(d) ? 'checked' : ''}>${d.toUpperCase()}</label>`).join('')}
         </div>
+        <div style="margin-top:6px">
+          <strong>Enhanced access periods:</strong>
+          <label class="check"><input type="checkbox" id="s-early" ${(s.extraPeriods || {}).early ? 'checked' : ''}>Early morning (07:00–08:00)</label>
+          <label class="check"><input type="checkbox" id="s-eve" ${(s.extraPeriods || {}).eve ? 'checked' : ''}>Evening (18:30–20:00)</label>
+          <span class="sub">adds EARLY/EVE columns to the rota and templates, and tracks DES minutes vs 60/1,000/week</span>
+        </div>
         <div class="formgrid" style="margin-top:10px">
           <label class="field">Sites (one per line — leave empty for single-site)
             <textarea id="s-sites" rows="3" style="display:block;margin-top:4px;min-width:220px">${esc((s.sites || []).join('\n'))}</textarea>
@@ -103,7 +113,14 @@ export default {
         <div class="toolbar">
           <input id="s-newroom" placeholder="e.g. Room 3 / Treatment 1" style="width:220px">
           <button id="s-addroom">Add room</button>
+          <span class="spacer"></span>
+          <button id="s-inferrooms" ${isValidPracticeCode(s.practiceCode) ? '' : 'disabled title="Set your practice code above first"'}>Suggest from Medicus (4 weeks)</button>
+          <button id="s-inferrooms-demo">Suggest from sample data</button>
         </div>
+        <p class="sub">Suggestion reads the appointment book and counts the peak number of clinicians consulting
+        face-to-face at once — that's how many rooms you need — then gives each clinician a stable usual room
+        that never clashes with anyone they actually overlap with.</p>
+        <div id="roominfer-out">${state.ui.roomInfer ? roomInferHTML(state.ui.roomInfer, state) : ''}</div>
       </div>
 
       <div class="card">
@@ -147,6 +164,10 @@ export default {
       s.userName = root.querySelector('#s-username').value.trim();
       s.userRole = root.querySelector('#s-userrole').value;
       s.sites = root.querySelector('#s-sites').value.split('\n').map((x) => x.trim()).filter(Boolean);
+      s.extraPeriods = {
+        early: root.querySelector('#s-early').checked,
+        eve: root.querySelector('#s-eve').checked
+      };
       s.bankHolidays = root.querySelector('#s-bh').value.split('\n').map((x) => x.trim()).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)).sort();
       s.peakPeriods = root.querySelector('#s-peaks').value.split('\n').map((line) => {
         const [name, start, end, max] = line.split(',').map((x) => x.trim());
@@ -219,6 +240,57 @@ export default {
       ctx.toast('Evidence pack opened — use the browser print dialog to save as PDF');
     };
 
+    const runRoomInfer = (rowsByDate) => {
+      state.ui.roomInfer = inferRooms({ rowsByDate, staff: state.staff });
+      ctx.rerender();
+    };
+    const inferLive = root.querySelector('#s-inferrooms');
+    if (inferLive) inferLive.onclick = async () => {
+      ctx.toast('Reading 4 weeks of appointment-book history…');
+      const thisMonday = mondayOf(todayISO());
+      const dates = [];
+      for (let w = 4; w >= 1; w--) {
+        for (let i = 0; i < 5; i++) dates.push(addDays(thisMonday, -7 * w + i));
+      }
+      try {
+        const { byDate, errors } = await fetchOverviewRange(s.practiceCode, dates);
+        if (errors.length && !Object.keys(byDate).length) { ctx.toast(`Fetch failed: ${errors[0]}`); return; }
+        runRoomInfer(Object.fromEntries(Object.entries(byDate).map(([d, payload]) => [d, parseOverview(payload)])));
+      } catch (err) {
+        ctx.toast(err instanceof Error ? err.message : String(err));
+      }
+    };
+    root.querySelector('#s-inferrooms-demo').onclick = () => {
+      const thisMonday = mondayOf(todayISO());
+      const rowsByDate = {};
+      for (let w = 2; w >= 1; w--) {
+        for (let i = 0; i < 4; i++) {
+          const d = addDays(thisMonday, -7 * w + i);
+          if (dayKey(d) !== 'sat' && dayKey(d) !== 'sun') rowsByDate[d] = parseOverview(demoOverviewPayload(state.staff, d));
+        }
+      }
+      runRoomInfer(rowsByDate);
+    };
+    const applyInfer = root.querySelector('#s-applyrooms');
+    if (applyInfer) applyInfer.onclick = async () => {
+      const result = state.ui.roomInfer;
+      if (!result) return;
+      // Top up the registry to the suggested count, then pin usual rooms.
+      while (state.rooms.length < result.roomCount) {
+        state.rooms.push({ id: uid(), name: `Room ${state.rooms.length + 1}` });
+      }
+      for (const a of result.assignments) {
+        const person = state.staff.find((p) => p.id === a.staffId);
+        const room = state.rooms[a.roomIndex];
+        if (person && room) person.usualRoomId = room.id;
+      }
+      await ctx.persist('rooms', 'staff');
+      await ctx.log(`Applied room inference: ${result.roomCount} rooms, ${result.assignments.length} usual-room assignments`);
+      ctx.toast(`${result.roomCount} room(s) ready and usual rooms set — use “Assign rooms” on the Rota page`);
+      state.ui.roomInfer = null;
+      ctx.rerender();
+    };
+
     root.querySelector('#s-addroom').onclick = async () => {
       const name = root.querySelector('#s-newroom').value.trim();
       if (!name) return;
@@ -275,3 +347,19 @@ export default {
     };
   }
 };
+
+function roomInferHTML(result, state) {
+  return `
+    <div class="sub" style="margin-bottom:6px">${result.datesObserved} day(s) analysed — peak concurrent face-to-face clinicians: <strong>${result.roomCount}</strong></div>
+    ${result.assignments.length ? `<table>
+      <thead><tr><th>Clinician</th><th>F2F sessions seen</th><th>Suggested usual room</th></tr></thead>
+      <tbody>${result.assignments.map((a) => `
+        <tr><td>${esc(a.name)}</td><td>${a.sessions}</td><td>Room ${a.roomIndex + 1}</td></tr>`).join('')}
+      </tbody>
+    </table>` : '<div class="muted">No registered clinicians matched the appointment-book data.</div>'}
+    ${result.unmatched.length ? `<div class="sub" style="margin-top:6px">Also consulting (not in registry): ${result.unmatched.map(esc).join(', ')}</div>` : ''}
+    <div class="toolbar" style="margin-top:8px">
+      <button id="s-applyrooms" class="primary" ${result.assignments.length ? '' : 'disabled'}>Apply: create ${result.roomCount} room(s) + set usual rooms</button>
+    </div>
+  `;
+}
