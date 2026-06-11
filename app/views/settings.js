@@ -112,7 +112,8 @@ export default {
         <h2 class="mt0">Rooms</h2>
         ${(state.rooms || []).map((r) => `
           <div class="toolbar" style="margin-bottom:4px">
-            <span>${esc(r.name)}</span><span class="spacer"></span>
+            <input value="${esc(r.name)}" data-roomname="${esc(r.id)}" style="width:240px" title="Edit to rename — usual-room assignments follow the room, not the name">
+            <span class="spacer"></span>
             <button class="small danger" data-delroom="${esc(r.id)}">Remove</button>
           </div>`).join('') || '<div class="sub" style="margin-bottom:8px">No rooms yet — add consulting/treatment rooms to assign them on the rota and catch double-bookings.</div>'}
         <div class="toolbar">
@@ -313,6 +314,21 @@ export default {
       state.ui.roomInfer = null;
       ctx.rerender();
     };
+
+    root.querySelectorAll('[data-roomname]').forEach((input) => {
+      input.onchange = async () => {
+        const room = state.rooms.find((r) => r.id === input.dataset.roomname);
+        if (!room) return;
+        const name = input.value.trim();
+        if (!name) { input.value = room.name; return; } // blank rename rejected
+        if (name === room.name) return;
+        const old = room.name;
+        room.name = name;
+        await ctx.persist('rooms');
+        await ctx.log(`Renamed room "${old}" to "${name}"`);
+        ctx.toast(`Renamed to ${name} — assignments follow the room automatically`);
+      };
+    });
 
     root.querySelector('#s-addroom').onclick = async () => {
       const name = root.querySelector('#s-newroom').value.trim();

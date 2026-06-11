@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.1 — 2026-06-11
+
+- Rooms are now renameable: the Settings room list shows each name as an editable field that
+  saves on change (blank rejected, audited). Usual-room and session assignments follow the
+  room id, so renaming "Room 3" to "Treatment 1" updates everywhere instantly.
+
 ## 1.7.0 — 2026-06-11
 
 The Gauntlet response: table-stakes gaps closed plus one-click setup.
