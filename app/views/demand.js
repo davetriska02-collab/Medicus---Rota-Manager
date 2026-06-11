@@ -15,7 +15,7 @@ const DAY_LABELS = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thur
 
 function bar(value, max) {
   const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
-  return `<div style="background:linear-gradient(90deg,var(--accent),var(--accent2));height:8px;border-radius:4px;width:${pct}%;min-width:2px"></div>`;
+  return `<span class="bar" style="width:${pct}%"></span>`;
 }
 
 // Deterministic Monday-heavy sample history for demos.
@@ -100,11 +100,14 @@ export default {
       </div>
 
       <div class="card">
-        <h2 class="mt0">Capacity vs demand —
-          <select id="d-week" style="font-size:13px">
-            ${[0, 1, 2, 3].map((n) => `<option value="${n}" ${weekOffset === n ? 'selected' : ''}>${n === 0 ? 'this week' : n === 1 ? 'next week' : `in ${n} weeks`}</option>`).join('')}
-          </select>
-        </h2>
+        <h2 class="mt0">Capacity vs demand</h2>
+        <div class="toolbar mb8">
+          <label class="field" style="margin:0">Week
+            <select id="d-week">
+              ${[0, 1, 2, 3].map((n) => `<option value="${n}" ${weekOffset === n ? 'selected' : ''}>${n === 0 ? 'this week' : n === 1 ? 'next week' : `in ${n} weeks`}</option>`).join('')}
+            </select>
+          </label>
+        </div>
         ${haveData && comparison.length ? `<table>
           <thead><tr><th>Day</th><th>Period</th><th>Sessions needed</th><th>Rostered</th><th>Balance</th></tr></thead>
           <tbody>
@@ -131,9 +134,9 @@ export default {
               const edited = day.manualAm != null || day.manualPm != null || day.manualTasks != null;
               return `<tr style="${day.excluded ? 'opacity:.45' : ''}">
                 <td>${esc(fmtDay(date))}${edited ? ' <span class="pill requested" title="Manually corrected">edited</span>' : ''}</td>
-                <td><input type="number" min="0" style="width:80px" data-dfield="am" data-ddate="${esc(date)}" value="${v.am}"></td>
-                <td><input type="number" min="0" style="width:80px" data-dfield="pm" data-ddate="${esc(date)}" value="${v.pm}"></td>
-                <td><input type="number" min="0" style="width:80px" data-dfield="tasks" data-ddate="${esc(date)}" value="${v.tasks}"></td>
+                <td><input type="number" min="0" class="w80" data-dfield="am" data-ddate="${esc(date)}" value="${v.am}"></td>
+                <td><input type="number" min="0" class="w80" data-dfield="pm" data-ddate="${esc(date)}" value="${v.pm}"></td>
+                <td><input type="number" min="0" class="w80" data-dfield="tasks" data-ddate="${esc(date)}" value="${v.tasks}"></td>
                 <td><input type="checkbox" data-dexclude="${esc(date)}" ${day.excluded ? 'checked' : ''}></td>
                 <td>${edited ? `<button class="small" data-dreset="${esc(date)}">Reset</button>` : ''}</td>
               </tr>`;

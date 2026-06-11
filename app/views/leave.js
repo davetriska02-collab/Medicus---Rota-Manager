@@ -57,20 +57,30 @@ export default {
                   <td><span class="pill bf-${esc(r.band)}">${esc(r.band)}</span></td></tr>`).join('')}
               </tbody>
             </table>
-            <div class="sub" style="margin-top:6px">Thresholds (Settings): monitor ≥ ${state.settings.bradfordThresholds.monitor}, high ≥ ${state.settings.bradfordThresholds.high}, severe ≥ ${state.settings.bradfordThresholds.severe}. A trigger means a conversation, never automatic action.</div>
+            <div class="sub mt8">Thresholds (Settings): monitor ≥ ${state.settings.bradfordThresholds.monitor}, high ≥ ${state.settings.bradfordThresholds.high}, severe ≥ ${state.settings.bradfordThresholds.severe}. A trigger means a conversation, never automatic action.</div>
           ` : ''}
         </div>` : ''}
 
       <div class="card">
         <h2 class="mt0">New request</h2>
-        <div class="toolbar">
-          <select id="r-staff">${people.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>
-          <select id="r-type">${LEAVE_TYPES.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select>
-          <input id="r-start" type="date" value="${esc(todayISO())}">
-          <input id="r-end" type="date" value="${esc(todayISO())}">
-          <input id="r-note" placeholder="note (optional)" style="width:180px">
-          <button id="r-submit" class="primary">Check &amp; submit</button>
+        <div class="formgrid">
+          <label class="field">Staff member
+            <select id="r-staff">${people.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>
+          </label>
+          <label class="field">Leave type
+            <select id="r-type">${LEAVE_TYPES.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select>
+          </label>
+          <label class="field">Start date
+            <input id="r-start" type="date" value="${esc(todayISO())}">
+          </label>
+          <label class="field">End date
+            <input id="r-end" type="date" value="${esc(todayISO())}">
+          </label>
+          <label class="field">Note (optional)
+            <input id="r-note" placeholder="e.g. pre-booked holiday">
+          </label>
         </div>
+        <button id="r-submit" class="primary mt8">Check &amp; submit</button>
         <div id="r-preview"></div>
       </div>
 
@@ -90,9 +100,9 @@ export default {
               const sl = leaveBalance(p, state.leave, 'study', todayISO());
               const tb = toilBalance(p, state.leave);
               return `<tr><td>${esc(p.name)}</td>
-                <td>${al.entitled}</td><td>${al.used}</td><td class="${al.remaining < 0 ? 'right' : ''}" style="${al.remaining < 0 ? 'color:var(--high);font-weight:700' : ''}">${al.remaining}</td>
-                <td>${sl.entitled}</td><td>${sl.used}</td><td style="${sl.remaining < 0 ? 'color:var(--high);font-weight:700' : ''}">${sl.remaining}</td>
-                <td style="${tb.remaining < 0 ? 'color:var(--high);font-weight:700' : ''}">${tb.remaining}</td></tr>`;
+                <td>${al.entitled}</td><td>${al.used}</td><td class="${al.remaining < 0 ? 'overdrawn' : ''}">${al.remaining}</td>
+                <td>${sl.entitled}</td><td>${sl.used}</td><td class="${sl.remaining < 0 ? 'overdrawn' : ''}">${sl.remaining}</td>
+                <td class="${tb.remaining < 0 ? 'overdrawn' : ''}">${tb.remaining}</td></tr>`;
             }).join('')}
           </tbody>
         </table>

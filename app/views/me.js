@@ -63,7 +63,7 @@ export default {
     };
 
     root.innerHTML = `
-      <h1>My week — ${esc(meStaff.name)} <button id="notme" class="small" style="vertical-align:middle">not me</button></h1>
+      <h1>My week — ${esc(meStaff.name)} <button id="notme" class="small" style="vertical-align:middle">Switch user</button></h1>
       <div class="cards">
         <div class="card"><div class="kpi">${mySessions.length}</div><div class="sub">Sessions in the next 14 days</div></div>
         <div class="card"><div class="kpi">${al.remaining}</div><div class="sub">Annual leave sessions remaining (of ${al.entitled})</div></div>
@@ -93,7 +93,7 @@ export default {
           <input id="ml-note" placeholder="note (optional)" style="width:160px">
           <button id="ml-submit" class="primary">Submit request</button>
         </div>
-        ${myLeave.length ? `<table style="margin-top:8px">
+        ${myLeave.length ? `<table class="mt8">
           <thead><tr><th>Type</th><th>Dates</th><th>Sessions</th><th>Status</th></tr></thead>
           <tbody>${myLeave.map((l) => `<tr><td>${esc((leaveTypeById(l.type) || {}).name || l.type)}</td>
             <td>${esc(fmtRange(l.startDate, l.endDate))}</td><td>${esc(String(l.sessions ?? '—'))}</td>
@@ -116,7 +116,7 @@ export default {
           <button id="sw-submit" class="primary">Propose</button>
         </div>
         <div id="sw-check"></div>
-        ${mySwaps.length ? `<table style="margin-top:8px">
+        ${mySwaps.length ? `<table class="mt8">
           <thead><tr><th>Mine</th><th>Theirs</th><th>Status</th></tr></thead>
           <tbody>${mySwaps.map((s) => {
             const a = state.entries.find((e) => e.id === s.entryAId);

@@ -36,10 +36,10 @@ export default {
             </select>
           </label>
         </div>
-        <div style="margin-top:2px;margin-bottom:8px">
+        <div class="mt8 mb8">
           <label class="check"><input type="checkbox" id="s-notify" ${s.notifications ? 'checked' : ''}>Browser notifications for sync updates and waiting approvals</label>
         </div>
-        <div class="toolbar" style="margin-top:6px">
+        <div class="toolbar mt8">
           ${syncStatus === 'unsupported'
             ? '<span class="sub">Shared-folder sync is not supported by this browser.</span>'
             : syncStatus === 'connected'
@@ -66,17 +66,17 @@ export default {
             <input id="s-anchor" type="date" value="${esc(s.templateAnchorMonday || '')}">
           </label>
         </div>
-        <div style="margin-top:6px">
+        <div class="mt8">
           <strong>Open days:</strong>
           ${DAY_KEYS.map((d) => `<label class="check"><input type="checkbox" class="s-day" value="${d}" ${s.openDays.includes(d) ? 'checked' : ''}>${d.toUpperCase()}</label>`).join('')}
         </div>
-        <div style="margin-top:6px">
+        <div class="mt8">
           <strong>Enhanced access periods:</strong>
           <label class="check"><input type="checkbox" id="s-early" ${(s.extraPeriods || {}).early ? 'checked' : ''}>Early morning (07:00–08:00)</label>
           <label class="check"><input type="checkbox" id="s-eve" ${(s.extraPeriods || {}).eve ? 'checked' : ''}>Evening (18:30–20:00)</label>
           <span class="sub">adds EARLY/EVE columns to the rota and templates, and tracks DES minutes vs 60/1,000/week</span>
         </div>
-        <div class="formgrid" style="margin-top:10px">
+        <div class="formgrid mt10">
           <label class="field">Sites (one per line — leave empty for single-site)
             <textarea id="s-sites" rows="3" style="display:block;margin-top:4px;min-width:220px">${esc((s.sites || []).join('\n'))}</textarea>
           </label>
@@ -91,31 +91,38 @@ export default {
 
       <div class="card">
         <h2 class="mt0">Safe-staffing policy <span class="sub" style="font-weight:400">(guidance defaults — configure to local policy)</span></h2>
+        <div class="card-section">Duty &amp; access</div>
         <div class="formgrid">
           <label class="field">Duty doctors required — AM<input id="s-dutyam" type="number" min="0" max="5" value="${esc(String(s.dutyRequired.am))}"></label>
           <label class="field">Duty doctors required — PM<input id="s-dutypm" type="number" min="0" max="5" value="${esc(String(s.dutyRequired.pm))}"></label>
           <label class="field">Appointments per clinical session<input id="s-appts" type="number" min="1" value="${esc(String(s.apptsPerSurgerySession))}"></label>
           <label class="field">Access benchmark (appts / 1,000 patients / week)<input id="s-bench" type="number" min="0" value="${esc(String(s.accessBenchmarkPer1000))}"></label>
+        </div>
+        <div class="card-section">Leave caps</div>
+        <div class="formgrid">
           <label class="field">Max simultaneous leave — GPs<input id="s-maxgp" type="number" min="0" value="${esc(String(s.maxSimultaneousLeave.gp))}"></label>
           <label class="field">Max simultaneous leave — nursing<input id="s-maxnur" type="number" min="0" value="${esc(String(s.maxSimultaneousLeave.nursing))}"></label>
           <label class="field">Max simultaneous leave — ARRS<input id="s-maxarrs" type="number" min="0" value="${esc(String(s.maxSimultaneousLeave.arrs))}"></label>
           <label class="field">Max simultaneous leave — non-clinical<input id="s-maxnon" type="number" min="0" value="${esc(String(s.maxSimultaneousLeave.nonclinical))}"></label>
+        </div>
+        <div class="card-section">Bradford &amp; WTD</div>
+        <div class="formgrid">
           <label class="field">Bradford Factor — monitor at<input id="s-bfmon" type="number" min="0" value="${esc(String(s.bradfordThresholds.monitor))}"></label>
           <label class="field">Bradford Factor — high at<input id="s-bfhigh" type="number" min="0" value="${esc(String(s.bradfordThresholds.high))}"></label>
           <label class="field">Bradford Factor — severe at<input id="s-bfsev" type="number" min="0" value="${esc(String(s.bradfordThresholds.severe))}"></label>
           <label class="field">WTD weekly hours cap (warn)<input id="s-wtd" type="number" min="0" value="${esc(String(s.wtdWeeklyHours ?? 48))}"></label>
         </div>
-        <button id="s-save" class="primary" style="margin-top:8px">Save settings</button>
+        <button id="s-save" class="primary mt8">Save settings</button>
       </div>
 
       <div class="card">
         <h2 class="mt0">Rooms</h2>
         ${(state.rooms || []).map((r) => `
-          <div class="toolbar" style="margin-bottom:4px">
+          <div class="toolbar mb8">
             <input value="${esc(r.name)}" data-roomname="${esc(r.id)}" style="width:240px" title="Edit to rename — usual-room assignments follow the room, not the name">
             <span class="spacer"></span>
             <button class="small danger" data-delroom="${esc(r.id)}">Remove</button>
-          </div>`).join('') || '<div class="sub" style="margin-bottom:8px">No rooms yet — add consulting/treatment rooms to assign them on the rota and catch double-bookings.</div>'}
+          </div>`).join('') || '<div class="sub mb8">No rooms yet — add consulting/treatment rooms to assign them on the rota and catch double-bookings.</div>'}
         <div class="toolbar">
           <input id="s-newroom" placeholder="e.g. Room 3 / Treatment 1" style="width:220px">
           <button id="s-addroom">Add room</button>

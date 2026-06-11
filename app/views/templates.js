@@ -21,10 +21,12 @@ export default {
 
     root.innerHTML = `
       <h1>Templates</h1>
-      <p class="sub">Repeating week patterns per staff member. “Generate from templates” on the Rota page rolls them forward,
-      skipping anything already rostered and punching out approved leave. Pattern weeks count from the anchor Monday
-      (${esc(state.settings.templateAnchorMonday || 'set on first generation')}).</p>
-      <div class="toolbar">
+      <div class=”card mb8”>
+        <p class=”sub” style=”margin:0”>Repeating week patterns per staff member. “Generate from templates” on the Rota page rolls them forward,
+        skipping anything already rostered and punching out approved leave. Pattern weeks count from the anchor Monday
+        (${esc(state.settings.templateAnchorMonday || 'set on first generation')}).</p>
+      </div>
+      <div class=”toolbar”>
         <select id="who">
           ${people.map((p) => `<option value="${esc(p.id)}" ${person && p.id === person.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
         </select>
@@ -35,7 +37,7 @@ export default {
           <button id="save" class="primary">Save pattern</button>
         ` : ''}
       </div>
-      ${person ? pattern(person, state.settings) : '<div class="muted card">Add staff first.</div>'}
+      ${person ? pattern(person, state.settings) : `<div class="card"><div class="empty-state"><h3>Add staff first</h3><p>Once you have staff members, select one above to set their weekly pattern.</p></div></div>`}
 
       <div class="card">
         <h2 class="mt0">Auto-infer patterns from the appointment book</h2>
@@ -168,7 +170,7 @@ function pattern(person, settings) {
               <th>${PERIOD_INFO[period].label}</th>
               ${DAY_KEYS.map((day) => `
                 <td>
-                  <select class="cellpick" data-week="${wi}" data-day="${day}" data-period="${period}">
+                  <select class="cellpick" data-week="${wi}" data-day="${day}" data-period="${period}" aria-label="${esc(DAY_LABELS[day])} ${esc(PERIOD_INFO[period].label)} week ${wi + 1}">
                     <option value="">—</option>
                     ${SESSION_TYPES.map((t) => `<option value="${t.id}" ${week[day] && week[day][period] === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}
                   </select>

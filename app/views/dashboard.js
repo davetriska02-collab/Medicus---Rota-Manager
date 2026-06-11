@@ -50,26 +50,51 @@ export default {
       <h1>Dashboard — ${esc(fmtDay(today))}</h1>
       <div class="cards">
         <div class="card">
-          <div class="kpi ${dutyToday.am.length && dutyToday.pm.length ? 'good' : 'bad'}">${dutyToday.am.length && dutyToday.pm.length ? '✓' : '✗'}</div>
+          <div class="kpi ${dutyToday.am.length && dutyToday.pm.length ? 'good' : 'bad'}">${dutyToday.am.length && dutyToday.pm.length ? 'OK' : 'Gap'}</div>
           <div class="sub">Duty today — AM: ${esc(dutyToday.am.join(', ') || 'nobody')} · PM: ${esc(dutyToday.pm.join(', ') || 'nobody')}</div>
         </div>
         <div class="card"><div class="kpi ${high.length ? 'bad' : 'good'}">${high.length}</div><div class="sub">High-priority warnings this week</div></div>
         <div class="card"><div class="kpi ${vacancies.length ? 'bad' : 'good'}">${vacancies.length}</div><div class="sub">Upcoming sessions needing cover</div></div>
         <div class="card"><div class="kpi">${pending.length}</div><div class="sub">Leave requests awaiting decision</div></div>
-        <div class="card"><div class="kpi ${cap.estimated >= cap.target ? 'good' : ''}">${cap.estimated}<span class="sub" style="font-size:14px"> / ${cap.target}</span></div><div class="sub">GP appointments this week vs benchmark</div></div>
+        <div class="card"><div class="kpi ${cap.estimated >= cap.target ? 'good' : ''}">${cap.estimated}<span class="kpi-unit"> / ${cap.target}</span></div><div class="sub">GP appointments this week vs benchmark</div></div>
       </div>
 
-      ${onLeaveToday.length ? `<div class="card"><strong>On leave today:</strong> ${esc(onLeaveToday.join(', '))}</div>` : ''}
+      ${onLeaveToday.length ? `<div class="card"><h2 class="mt0">On leave today</h2>${esc(onLeaveToday.join(', '))}</div>` : ''}
       ${sfe.length || fitFlags.length || bradfordFlagged.length ? `<div class="card">
         ${sfe.map((f) => `<div class="warn"><span class="sev ${f.eligible ? 'high' : 'medium'}">SFE</span><span>${esc(f.name)} — sickness day ${f.days}${f.eligible ? ', locum reimbursement claimable' : ''}</span></div>`).join('')}
         ${fitFlags.map((f) => `<div class="warn"><span class="sev ${esc(f.severity)}">fit note</span><span>${esc(f.message)}</span></div>`).join('')}
         ${bradfordFlagged.map((r) => `<div class="warn"><span class="sev ${r.band === 'severe' ? 'high' : 'medium'}">Bradford</span><span>${esc(r.name)} — score ${r.score} (${r.episodes} episodes, ${r.days} days, 52-week rolling) — <a href="#leave">review</a></span></div>`).join('')}
       </div>` : ''}
 
+      ${vacancies.length ? `
+        <div class="card">
+          <h2 class="mt0">Cover worklist</h2>
+          ${vacancies.slice(0, 12).map((e) => {
+            const p = state.staff.find((s) => s.id === e.staffId);
+            const t = typeById(e.typeId);
+            const options = rankCover({ vacancy: e, staff: state.staff, entries: state.entries, leaveList: state.leave }).slice(0, 4);
+            return `
+              <div style="border-bottom:1px solid var(--line);padding:8px 0">
+                <div><strong>${esc(fmtDay(e.date))} ${e.period.toUpperCase()}</strong> — ${esc(t ? t.name : e.typeId)} (was ${esc(p ? p.name : '?')})
+                  ${e.note ? `<span class="sub">· ${esc(e.note)}</span>` : ''}</div>
+                ${options.length ? `
+                  <details class="mt8"><summary class="sub">Cover options (${options.length})</summary>
+                    ${options.map((c) => `
+                      <div class="toolbar mt8" style="margin-bottom:0">
+                        <span>${esc(c.name)}${c.isLocum ? ' <span class="pill requested">locum</span>' : ''}</span>
+                        <span class="sub">${esc(c.reason)}</span>
+                        <span class="spacer"></span>
+                        <button class="small primary" data-assign="${esc(e.id)}|${esc(c.staffId)}">Assign</button>
+                      </div>`).join('')}
+                  </details>` : '<div class="sub mt8">No eligible cover found — consider an external locum.</div>'}
+              </div>`;
+          }).join('')}
+        </div>` : ''}
+
       <div class="card">
         <h2 class="mt0">This week's checks <a href="#rota" class="sub" style="font-weight:400">open rota →</a></h2>
         ${warnHTML(warnings.slice(0, 10))}
-        ${warnings.length > 10 ? `<div class="sub" style="margin-top:6px">…and ${warnings.length - 10} more on the Rota page.</div>` : ''}
+        ${warnings.length > 10 ? `<div class="sub mt8">…and ${warnings.length - 10} more on the Rota page.</div>` : ''}
       </div>
 
       ${pendingSwaps.length ? `
@@ -86,7 +111,7 @@ export default {
             const errors = validateSwap({ entryA: a, entryB: b, staff: state.staff, leaveList: state.leave });
             return `
               <div style="border-bottom:1px solid var(--line);padding:8px 0">
-                <div class="toolbar" style="margin-bottom:4px">
+                <div class="toolbar mb8">
                   <span><strong>${esc(pa ? pa.name : '?')}</strong> ${esc(fmtDay(a.date))} ${a.period.toUpperCase()} (${esc(ta ? ta.name : a.typeId)})
                     ⇄ <strong>${esc(pb ? pb.name : '?')}</strong> ${esc(fmtDay(b.date))} ${b.period.toUpperCase()} (${esc(tb ? tb.name : b.typeId)})</span>
                   <span class="spacer"></span>
@@ -101,52 +126,39 @@ export default {
       ${state.staff.length ? `
         <div class="card">
           <h2 class="mt0">Same-day sickness</h2>
-          <div class="toolbar" style="margin-bottom:0">
+          <div class="toolbar mb8">
             <select id="sickwho">${staffSorted(state.staff).map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>
             <button id="sickgo" class="danger">Mark sick today</button>
             <span class="sub">Approves a sickness episode for today, punches out their sessions and lines up cover options below.</span>
           </div>
         </div>` : ''}
 
-      ${vacancies.length ? `
+      ${state.staff.length ? `
+        <details class="card">
+          <summary>One-click setup from Medicus</summary>
+          <p class="sub mt8">Reads 4 weeks of the appointment book, imports your clinicians, infers each person's
+          week pattern and the rooms (incl. a usual room each), then generates the next 4 weeks of rota.
+          Additive only — existing staff, rooms and sessions are never overwritten. Review Staff and
+          Templates afterwards.</p>
+          <div class="toolbar mb8">
+            <button id="setup-live" class="primary" ${isValidPracticeCode(state.settings.practiceCode) ? '' : 'disabled title="Set your practice code in Settings first"'}>Set up from Medicus</button>
+            <button id="setup-demo">Run with sample data</button>
+          </div>
+          ${state.ui.setupResult ? setupSummary(state.ui.setupResult) : ''}
+        </details>` : `
         <div class="card">
-          <h2 class="mt0">Cover worklist</h2>
-          ${vacancies.slice(0, 12).map((e) => {
-            const p = state.staff.find((s) => s.id === e.staffId);
-            const t = typeById(e.typeId);
-            const options = rankCover({ vacancy: e, staff: state.staff, entries: state.entries, leaveList: state.leave }).slice(0, 4);
-            return `
-              <div style="border-bottom:1px solid var(--line);padding:8px 0">
-                <div><strong>${esc(fmtDay(e.date))} ${e.period.toUpperCase()}</strong> — ${esc(t ? t.name : e.typeId)} (was ${esc(p ? p.name : '?')})
-                  ${e.note ? `<span class="sub">· ${esc(e.note)}</span>` : ''}</div>
-                ${options.length ? `
-                  <details style="margin-top:4px"><summary class="sub">Cover options (${options.length})</summary>
-                    ${options.map((c) => `
-                      <div class="toolbar" style="margin:6px 0 0">
-                        <span>${esc(c.name)}${c.isLocum ? ' <span class="pill requested">locum</span>' : ''}</span>
-                        <span class="sub">${esc(c.reason)}</span>
-                        <span class="spacer"></span>
-                        <button class="small primary" data-assign="${esc(e.id)}|${esc(c.staffId)}">Assign</button>
-                      </div>`).join('')}
-                  </details>` : '<div class="sub" style="margin-top:4px">No eligible cover found — consider an external locum.</div>'}
-              </div>`;
-          }).join('')}
-        </div>` : ''}
-
-      <div class="card">
-        <h2 class="mt0">⚡ One-click setup from Medicus</h2>
-        <p class="sub">Reads 4 weeks of the appointment book, imports your clinicians, infers each person's
-        week pattern and the rooms (incl. a usual room each), then generates the next 4 weeks of rota.
-        Additive only — existing staff, rooms and sessions are never overwritten. Review Staff and
-        Templates afterwards.</p>
-        <div class="toolbar" style="margin-bottom:0">
-          <button id="setup-live" class="primary" ${isValidPracticeCode(state.settings.practiceCode) ? '' : 'disabled title="Set your practice code in Settings first"'}>Set up from Medicus</button>
-          <button id="setup-demo">Run with sample data</button>
+          <h2 class="mt0">One-click setup from Medicus</h2>
+          <p class="sub">Reads 4 weeks of the appointment book, imports your clinicians, infers each person's
+          week pattern and the rooms (incl. a usual room each), then generates the next 4 weeks of rota.
+          Additive only — existing staff, rooms and sessions are never overwritten. Review Staff and
+          Templates afterwards.</p>
+          <div class="toolbar mb8">
+            <button id="setup-live" class="primary" ${isValidPracticeCode(state.settings.practiceCode) ? '' : 'disabled title="Set your practice code in Settings first"'}>Set up from Medicus</button>
+            <button id="setup-demo">Run with sample data</button>
+          </div>
+          ${state.ui.setupResult ? setupSummary(state.ui.setupResult) : ''}
         </div>
-        ${state.ui.setupResult ? setupSummary(state.ui.setupResult) : ''}
-      </div>
 
-      ${state.staff.length ? '' : `
         <div class="card">
           <h2 class="mt0">Getting started</h2>
           <ol>

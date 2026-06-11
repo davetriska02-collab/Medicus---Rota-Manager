@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.9.0 — 2026-06-11
+
+The Atelier pass: a commercial-grade UI refinement (design direction in docs/design/).
+Behaviour identical; every handler, id and test untouched.
+
+- **Token system**: a real 6-stop type scale (11/12/13/14/16/20 + 24 display), four border
+  radii instead of eight, one accent hue (indigo demoted to gradients only), spacing
+  utilities replacing the worst inline styles.
+- **Accessibility**: WCAG AA contrast fixes (muted text, nav footer), stronger focus rings,
+  larger small-button hit targets, aria-labels on the 40-select template grid, visible
+  empty-cell markers.
+- **Rota view**: the 14-control toolbar regrouped into week-navigation, a segmented
+  Staff/Rooms toggle and a collapsed Actions menu (Undo and Solve stay persistent); the grid
+  scrolls within the viewport so the checks panel stays reachable; vacancy chips gained a
+  slow stripe drift — urgency visible across the room (off under reduced-motion).
+- **Dashboard**: cover worklist promoted above the weekly checks, the setup wizard collapses
+  once staff exist, duty KPI reads OK/Gap, units on the capacity figure.
+- **Forms & craft**: Leave request form gained field labels; Settings policy card split into
+  titled sections; unified badge treatment across severity/status pills (flat, legible,
+  colour-true in print); glow removed from non-interactive elements; row-level table hover;
+  proper empty states on Staff/Sync/Templates.
+- **Print**: severity/status colours preserved on paper, load-bearing footnotes no longer
+  hidden, all tables sized for A4.
+
 ## 1.8.0 — 2026-06-11
 
 Demand-curve planning, pulled straight from the EHR.

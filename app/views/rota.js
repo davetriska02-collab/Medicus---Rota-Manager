@@ -175,13 +175,15 @@ export default {
       <h1>Rota</h1>
       <div class="printhead">Rota — ${esc(fmtDay(dates[0]))} to ${esc(fmtDay(dates[6]))}</div>
       <div class="toolbar">
-        <button id="prev">‹</button>
+        <button id="prev" title="Previous week">‹</button>
         <button id="todaybtn">This week</button>
-        <button id="next">›</button>
+        <button id="next" title="Next week">›</button>
         <input type="date" id="jump" value="${esc(state.weekMonday)}" title="Jump to week">
         <span class="weeklabel">${esc(fmtDay(dates[0]))} – ${esc(fmtDay(dates[6]))}</span>
-        <button id="modestaff" class="${mode === 'staff' ? 'primary' : ''}">Staff</button>
-        <button id="moderooms" class="${mode === 'rooms' ? 'primary' : ''}" ${rooms.length ? '' : 'disabled title="Add rooms in Settings first"'}>Rooms</button>
+        <span class="seg">
+          <button id="modestaff" class="${mode === 'staff' ? 'primary' : ''}">Staff</button>
+          <button id="moderooms" class="${mode === 'rooms' ? 'primary' : ''}" ${rooms.length ? '' : 'disabled title="Add rooms in Settings first"'}>Rooms</button>
+        </span>
         ${sites.length > 1 ? `
           <select id="sitefilter" title="Filter by site">
             <option value="">All sites</option>
@@ -189,15 +191,22 @@ export default {
           </select>` : ''}
         <span class="spacer"></span>
         <button id="undobtn" ${undoStack.length ? '' : 'disabled'} title="Ctrl+Z">↶ Undo</button>
-        <button id="copyweek" title="Copy last week's sessions into empty cells this week">Copy previous week</button>
-        ${rooms.length ? '<button id="fillrooms" title="Give each clinic session its owner\'s usual room, avoiding clashes">Assign rooms</button>' : ''}
-        <select id="genweeks">
-          ${[1, 2, 4, 6, 8, 12].map((n) => `<option value="${n}">${n} week${n > 1 ? 's' : ''}</option>`).join('')}
-        </select>
-        <button id="generate">Generate from templates</button>
-        <button id="autoduty" class="primary">Auto-assign duty</button>
         <button id="solvebtn" class="primary">Solve rota</button>
-        <button id="printbtn" title="Print this week">Print</button>
+        <details class="actions">
+          <summary>Actions</summary>
+          <div class="actions-panel">
+            <button id="autoduty">Auto-assign duty</button>
+            <button id="copyweek" title="Copy last week's sessions into empty cells this week">Copy previous week</button>
+            ${rooms.length ? '<button id="fillrooms" title="Give each clinic session its owner\'s usual room, avoiding clashes">Assign rooms</button>' : ''}
+            <div class="actions-row">
+              <select id="genweeks">
+                ${[1, 2, 4, 6, 8, 12].map((n) => `<option value="${n}">${n} week${n > 1 ? 's' : ''}</option>`).join('')}
+              </select>
+              <button id="generate">Generate from templates</button>
+            </div>
+            <button id="printbtn" title="Print this week">Print</button>
+          </div>
+        </details>
       </div>
       ${mode === 'staff' && selected.length ? `
         <div class="toolbar bulkbar">
@@ -216,7 +225,10 @@ export default {
       </div>
       <div class="sub" style="margin:6px 0 14px">
         ${mode === 'staff'
-          ? 'Click a cell to edit · Shift-click to multi-select · drag to move, drop on occupied to swap, Ctrl-drop to copy · arrows + Enter to navigate, Delete to clear, Ctrl+Z to undo.'
+          ? `Click to edit · Shift-click to multi-select · drag to move · Ctrl+Z to undo.
+             <details style="display:inline"><summary>More shortcuts</summary>
+               Drop on occupied = swap · Ctrl-drop = copy · arrows + Enter to navigate · Delete to clear
+             </details>`
           : 'Rooms view: who is in each room per session. Assign rooms from the Staff view cell menu. The Unassigned row shows clinical sessions with no room.'}
       </div>
       <div class="card">
@@ -574,13 +586,13 @@ function staffGrid(state, people, showDates, dates, today, selected) {
                 else if (entry) inner = typeChip(entry.typeId, entry.status, extra);
                 else inner = '<span class="empty">·</span>';
                 if (entry && !onLeave && (room || entry.note)) {
-                  inner += `<div class="roomtag">${esc(room ? room.name : '')}${entry.note ? (room ? ' ' : '') + '📝' : ''}</div>`;
+                  inner += `<div class="roomtag">${esc(room ? room.name : '')}${entry.note ? (room ? ' ' : '') + '✎' : ''}</div>`;
                 }
                 const isSelected = selected.includes(`${p.id}|${d}|${period}`);
                 return `<td class="cell${d === today ? ' today' : ''}${isSelected ? ' selected' : ''}"${entry ? ' draggable="true"' : ''} data-staff="${esc(p.id)}" data-date="${esc(d)}" data-period="${period}">${inner}</td>`;
               }).join('');
             }).join('')}
-            <td class="right" title="${rostered} rostered / ${esc(String(p.contractedSessions))} contracted" style="${over ? 'color:var(--med);font-weight:700' : rostered < p.contractedSessions ? 'color:var(--muted)' : ''}">${rostered}/${esc(String(p.contractedSessions))}</td>
+            <td class="right${over ? ' overdrawn' : rostered < p.contractedSessions ? ' muted' : ''}" title="${rostered} rostered / ${esc(String(p.contractedSessions))} contracted">${rostered}/${esc(String(p.contractedSessions))}</td>
           </tr>
         `;
         }).join('')}
@@ -604,7 +616,7 @@ function staffGrid(state, people, showDates, dates, today, selected) {
               return e.typeId === 'duty' && person && person.dutyEligible;
             });
             if (!s.openDays.includes(dayKey(d))) return '<th class="muted">—</th>';
-            return `<th title="${present.length} clinical staff, duty ${duty ? 'covered' : 'NOT covered'}" style="color:${duty ? 'var(--ok)' : 'var(--high)'}">${present.length} ${duty ? '✓' : '✗'}</th>`;
+            return `<th title="${present.length} clinical staff, duty ${duty ? 'covered' : 'NOT covered'}"><span class="${duty ? 'ok-mark' : 'bad-mark'}">${present.length} ${duty ? 'OK' : 'Gap'}</span></th>`;
           }).join('')).join('')}
           <th></th>
         </tr>
@@ -676,12 +688,12 @@ function solvePanel(state) {
           </select>
         </label>
       </div>
-      <div class="toolbar" style="margin-top:8px">
+      <div class="toolbar mt8">
         <button id="sv-run" class="primary">Run</button>
       </div>
       ${result ? `
-        <div style="margin-top:12px">
-          <div class="sub" style="margin-bottom:8px">
+        <div class="mt12">
+          <div class="sub mb8">
             Score ${esc(String(result.score.before))} → ${esc(String(result.score.after))} &middot; ${esc(String(result.changes.length))} change(s)
           </div>
           ${result.changes.length ? `
@@ -701,11 +713,11 @@ function solvePanel(state) {
             </table>
           ` : '<div class="muted">No changes — rota is already optimal.</div>'}
           ${result.unresolved && result.unresolved.length ? `
-            <div style="margin-top:8px">
+            <div class="mt8">
               ${warnHTML(result.unresolved.map((u) => ({ severity: 'medium', message: u.message })))}
             </div>
           ` : ''}
-          <div class="toolbar" style="margin-top:8px">
+          <div class="toolbar mt8">
             <button id="sv-apply" class="primary" ${result.changes.length ? '' : 'disabled'}>Apply</button>
             <button id="sv-discard">Discard</button>
           </div>

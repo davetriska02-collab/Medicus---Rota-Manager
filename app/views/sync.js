@@ -81,7 +81,7 @@ export default {
               </details>` : ''}
           </div>
         `).join('')}
-      ` : '<div class="card muted">No check run yet for this week.</div>'}
+      ` : `<div class="card"><div class="empty-state"><h3>No check run yet</h3><p>Run a live check or sample check above to compare the rota against the Medicus appointment book.</p></div></div>`}
     `;
 
     root.querySelector('#run').onclick = async () => {

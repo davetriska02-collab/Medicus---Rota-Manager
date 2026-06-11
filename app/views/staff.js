@@ -33,7 +33,7 @@ export default {
               <td><button class="small" data-ics="${esc(p.id)}">Export .ics</button></td>
             </tr>
           `).join('')}
-          ${state.staff.length ? '' : '<tr><td colspan="7" class="muted">No staff yet. Add people here, or import clinicians from the Medicus appointment book via Live sync, or load demo data from Settings.</td></tr>'}
+          ${state.staff.length ? '' : `<tr><td colspan="7"><div class="empty-state"><h3>No staff yet</h3><p>Add people here, import clinicians from Medicus via Live sync, or load demo data from Settings.</p></div></td></tr>`}
         </tbody>
       </table>
       ${editing ? form(editing, editingId === 'new', state.settings.sites || [], state.rooms || []) : ''}
@@ -163,7 +163,7 @@ function form(p, isNew, sites, rooms) {
         </label>
         <label class="field">Colour<input id="f-colour" type="color" value="${esc(p.colour)}"></label>
       </div>
-      <div style="margin:10px 0">
+      <div class="mt10 mb8">
         <label class="check"><input id="f-duty" type="checkbox" ${p.dutyEligible ? 'checked' : ''}>Duty-doctor eligible</label>
         <label class="check"><input id="f-super" type="checkbox" ${p.supervisor ? 'checked' : ''}>Registrar supervisor</label>
         <label class="check"><input id="f-rx" type="checkbox" ${p.prescriber ? 'checked' : ''}>Prescriber</label>
