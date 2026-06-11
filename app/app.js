@@ -13,11 +13,12 @@ import rota from './views/rota.js';
 import staff from './views/staff.js';
 import templates from './views/templates.js';
 import leave from './views/leave.js';
+import demand from './views/demand.js';
 import syncView from './views/sync.js';
 import settings from './views/settings.js';
 
-const VIEWS = { dashboard, me, rota, staff, templates, leave, sync: syncView, settings };
-const SYNC_SCOPES = ['staff', 'entries', 'leave', 'rooms', 'swaps', 'audit', 'settings'];
+const VIEWS = { dashboard, me, rota, staff, templates, leave, demand, sync: syncView, settings };
+const SYNC_SCOPES = ['staff', 'entries', 'leave', 'rooms', 'swaps', 'audit', 'demand', 'settings'];
 
 const state = {
   staff: [],
@@ -26,6 +27,7 @@ const state = {
   rooms: [],
   swaps: [],
   audit: [],
+  demand: { days: {}, pulledAt: '' },
   settings: {},
   weekMonday: mondayOf(todayISO()),
   ui: {} // per-view scratch (selected staff member, last sync results, …)

@@ -142,6 +142,7 @@ export const DEFAULT_SETTINGS = {
   extraPeriods: { early: false, eve: false }, // enhanced-access columns around core hours
   wtdWeeklyHours: 48, // Working Time Regulations average cap — warns, never blocks
   notifications: false, // browser notifications for sync/approval events (opt-in)
+  demand: { weeksWindow: 8, halfLifeWeeks: 4, bufferPct: 10, includeTasks: true, tasksDutyThreshold: 60 },
   // England & Wales bank holidays (editable in Settings).
   bankHolidays: [
     '2026-01-01', '2026-04-03', '2026-04-06', '2026-05-04', '2026-05-25', '2026-08-31', '2026-12-25', '2026-12-28',

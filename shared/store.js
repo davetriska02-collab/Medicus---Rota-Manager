@@ -11,6 +11,7 @@ const KEYS = {
   rooms: 'rota.rooms',
   swaps: 'rota.swaps',
   audit: 'rota.audit',
+  demand: 'rota.demand',
   settings: 'rota.settings'
 };
 
@@ -51,6 +52,7 @@ export async function loadAll() {
     rooms: got[KEYS.rooms] || [],
     swaps: got[KEYS.swaps] || [],
     audit: got[KEYS.audit] || [],
+    demand: got[KEYS.demand] || { days: {}, pulledAt: '' },
     settings: { ...DEFAULT_SETTINGS, ...(got[KEYS.settings] || {}) }
   };
 }
@@ -79,6 +81,7 @@ export async function exportEnvelope() {
       rooms: data.rooms,
       swaps: data.swaps,
       audit: data.audit,
+      demand: data.demand,
       settings: data.settings
     }
   };
@@ -95,6 +98,7 @@ export async function importEnvelope(envelope) {
   if (Array.isArray(s.rooms)) await save('rooms', s.rooms);
   if (Array.isArray(s.swaps)) await save('swaps', s.swaps);
   if (Array.isArray(s.audit)) await save('audit', s.audit);
+  if (s.demand && typeof s.demand === 'object') await save('demand', s.demand);
   if (s.settings && typeof s.settings === 'object') {
     await save('settings', { ...DEFAULT_SETTINGS, ...s.settings });
   }

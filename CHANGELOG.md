@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.8.0 — 2026-06-11
+
+Demand-curve planning, pulled straight from the EHR.
+
+- **New Demand view**: pulls booked-appointment history (appointment book) and inbound task
+  arrivals (the five patient-request task lists, counted and discarded — never persisted) over
+  a configurable window, builds a per-weekday demand profile, converts it into required
+  clinical sessions, and compares against the rostered rota for any of the next four weeks
+  (short/OK/over per day and period).
+- **Granular model controls**: history window (2–26 weeks), recency half-life (exponential
+  decay, 0 = equal weighting), safety buffer %, include/exclude task load, and a tasks/day
+  threshold that flags days worth a second duty doctor.
+- **Manual correction of pulled data**: every day's AM/PM booked and task figures are editable
+  (corrections override pulled values and survive re-pulls, marked "edited" with one-click
+  reset), and any day can be excluded from the model entirely (flu clinics, closures).
+  Bank holidays are excluded automatically.
+- `engine/demand.js` (pure, tested) + `fetchTaskCounts` in the Medicus client; demand data is
+  in the backup envelope and practice sync. Sample-data mode for exploring without Medicus.
+
 ## 1.7.1 — 2026-06-11
 
 - Rooms are now renameable: the Settings room list shows each name as an editable field that
