@@ -123,6 +123,33 @@ export function checkWeek({ dates, entries, staff, leaveList, settings, rooms = 
     });
   }
 
+  // Working Time Regulations (employed staff only — partners are
+  // self-employed, locums set their own hours): weekly rostered hours vs
+  // the 48h average cap, and at least one rest day in seven. Warn, never
+  // block — opt-outs exist and one heavy week within a fair average is lawful.
+  const WTR_EMPLOYED = ['salaried', 'registrar', 'employed', 'arrs'];
+  const capMinutes = (settings.wtdWeeklyHours || 48) * 60;
+  for (const person of staff) {
+    if (!WTR_EMPLOYED.includes(person.employmentType)) continue;
+    const mine = weekEntries.filter(
+      (e) => e.staffId === person.id && ACTIVE(e) && !approvedLeaveFor(leaveList, person.id, e.date)
+    );
+    if (!mine.length) continue;
+    const minutes = mine.reduce((sum, e) => sum + ((PERIOD_INFO[e.period] || {}).minutes || 0), 0);
+    if (minutes > capMinutes) {
+      warnings.push({
+        severity: 'medium', kind: 'wtd', staffId: person.id,
+        message: `WTD: ${person.name} is rostered ${(minutes / 60).toFixed(1)}h this week — over the ${settings.wtdWeeklyHours || 48}h average cap (lawful only with an opt-out and a fair average)`
+      });
+    }
+    if (new Set(mine.map((e) => e.date)).size >= 7) {
+      warnings.push({
+        severity: 'medium', kind: 'wtd', staffId: person.id,
+        message: `WTD: ${person.name} is rostered on all seven days this week — no rest day`
+      });
+    }
+  }
+
   // Room clashes: two active sessions in the same room at the same time.
   const byRoom = {};
   for (const e of weekEntries.filter(ACTIVE)) {

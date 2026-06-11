@@ -54,6 +54,16 @@ export function leaveBalance(staffMember, leaveList, type, asOfISO) {
   return { entitled, used, remaining: entitled - used };
 }
 
+// TOIL doesn't reset with the leave year: balance = sessions banked minus
+// approved TOIL leave, all time.
+export function toilBalance(staffMember, leaveList) {
+  const accrued = staffMember.toilAccrued || 0;
+  const spent = leaveList
+    .filter((l) => l.staffId === staffMember.id && l.type === 'toil' && l.status === 'approved')
+    .reduce((sum, l) => sum + (l.sessions || 0), 0);
+  return { accrued, spent, remaining: accrued - spent };
+}
+
 // Guardrails evaluated when a request is submitted or about to be approved.
 // Returns the session cost plus human-readable warnings; the manager keeps
 // the final say (warn, don't hard-block).
@@ -71,6 +81,16 @@ export function checkLeaveRequest(req, { staff, leaveList, entries, settings }) 
       warnings.push({
         severity: 'high',
         message: `${person.name}: request costs ${sessions} sessions but only ${bal.remaining} of ${bal.entitled} ${lt.name.toLowerCase()} sessions remain this leave year`
+      });
+    }
+  }
+
+  if (req.type === 'toil') {
+    const bal = toilBalance(person, leaveList.filter((l) => l.id !== req.id));
+    if (sessions > bal.remaining) {
+      warnings.push({
+        severity: 'high',
+        message: `${person.name}: request costs ${sessions} TOIL sessions but only ${bal.remaining} are banked (${bal.accrued} accrued, ${bal.spent} taken)`
       });
     }
   }

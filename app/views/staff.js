@@ -76,6 +76,7 @@ export default {
       person.supervisor = val('f-super').checked;
       person.prescriber = val('f-rx').checked;
       person.entitlement = { annual: Number(val('f-al').value) || 0, study: Number(val('f-sl').value) || 0 };
+      person.toilAccrued = Number(val('f-toil').value) || 0;
       person.medicusName = val('f-medicus').value.trim();
       person.site = val('f-site').value;
       person.usualRoomId = val('f-room').value || null;
@@ -133,6 +134,7 @@ function form(p, isNew, sites, rooms) {
         <label class="field">Contracted sessions / week<input id="f-sessions" type="number" min="0" max="12" value="${esc(String(p.contractedSessions))}"></label>
         <label class="field">Annual leave (sessions/yr)<input id="f-al" type="number" min="0" value="${esc(String(p.entitlement.annual))}"></label>
         <label class="field">Study leave (sessions/yr)<input id="f-sl" type="number" min="0" value="${esc(String(p.entitlement.study))}"></label>
+        <label class="field">TOIL banked (sessions)<input id="f-toil" type="number" min="0" value="${esc(String(p.toilAccrued || 0))}"></label>
         <label class="field">Name in Medicus appointment book<input id="f-medicus" value="${esc(p.medicusName)}" placeholder="exactly as Medicus shows it"></label>
         <label class="field">Usual room
           <select id="f-room">

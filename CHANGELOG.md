@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.7.0 — 2026-06-11
+
+The Gauntlet response: table-stakes gaps closed plus one-click setup.
+
+- **One-click setup wizard** (Dashboard): reads 4 weeks of the Medicus appointment book and,
+  in one run, imports unknown clinicians, infers each person's week pattern, infers rooms and
+  usual-room assignments, and generates the next 4 weeks of rota. Additive only; sample-data
+  mode included. Time-to-live: minutes.
+- **WTD checks** in the rules engine (warn, never block, employed staff only): weekly rostered
+  hours vs the configurable 48h average cap, and a no-rest-day check across seven days.
+- **TOIL**: banked sessions per person (staff editor), spent via a TOIL leave type with a
+  balance guardrail at request time, shown in the Leave balances table.
+- **Timesheet CSV export** (`engine/timesheet.js`, Settings → Reports): sessions worked per
+  person by type, hours from session lengths, locum-covered counts, approved leave by type —
+  payroll-ready, RFC-safe CSV escaping.
+- **Browser notifications** (opt-in, Settings): shared-rota sync updates, and an approvals
+  alert for managers when new leave/swap requests arrive via sync. chrome.notifications in the
+  extension, web Notifications in a dev tab.
+- Benchmark report from the first Gauntlet run committed at docs/benchmark/.
+
 ## 1.6.0 — 2026-06-10
 
 Enhanced-access periods and automatic room inference.

@@ -8,6 +8,7 @@ import { exportEnvelope, importEnvelope, wipe, save, uid } from '../../shared/st
 import { demoData } from '../../shared/demo.js';
 import { mondayOf, todayISO, addDays, dayKey } from '../../shared/time.js';
 import { buildEvidenceReport } from '../../engine/evidence.js';
+import { timesheetCSV } from '../../engine/timesheet.js';
 import { fetchOverviewRange } from '../../shared/medicus-api.js';
 import { parseOverview } from '../../engine/reconcile.js';
 import { inferRooms } from '../../engine/room-infer.js';
@@ -34,6 +35,9 @@ export default {
               <option value="staff" ${s.userRole === 'staff' ? 'selected' : ''}>Staff (My week focused)</option>
             </select>
           </label>
+        </div>
+        <div style="margin-top:2px;margin-bottom:8px">
+          <label class="check"><input type="checkbox" id="s-notify" ${s.notifications ? 'checked' : ''}>Browser notifications for sync updates and waiting approvals</label>
         </div>
         <div class="toolbar" style="margin-top:6px">
           ${syncStatus === 'unsupported'
@@ -99,6 +103,7 @@ export default {
           <label class="field">Bradford Factor — monitor at<input id="s-bfmon" type="number" min="0" value="${esc(String(s.bradfordThresholds.monitor))}"></label>
           <label class="field">Bradford Factor — high at<input id="s-bfhigh" type="number" min="0" value="${esc(String(s.bradfordThresholds.high))}"></label>
           <label class="field">Bradford Factor — severe at<input id="s-bfsev" type="number" min="0" value="${esc(String(s.bradfordThresholds.severe))}"></label>
+          <label class="field">WTD weekly hours cap (warn)<input id="s-wtd" type="number" min="0" value="${esc(String(s.wtdWeeklyHours ?? 48))}"></label>
         </div>
         <button id="s-save" class="primary" style="margin-top:8px">Save settings</button>
       </div>
@@ -129,6 +134,12 @@ export default {
           <select id="s-evweeks">${[4, 8, 12, 26].map((n) => `<option value="${n}" ${n === 12 ? 'selected' : ''}>Last ${n} weeks</option>`).join('')}</select>
           <button id="s-evidence" class="primary">Generate CQC evidence pack</button>
           <span class="sub">Safe-staffing rules in force + the weekly compliance record — opens printable, save as PDF.</span>
+        </div>
+        <div class="toolbar" style="margin-top:8px">
+          <input id="s-tsfrom" type="date" value="${esc(addDays(todayISO(), -27))}">
+          <input id="s-tsto" type="date" value="${esc(todayISO())}">
+          <button id="s-timesheet">Export timesheet CSV</button>
+          <span class="sub">Sessions worked per person (by type, hours, locum-covered) plus approved leave — payroll-ready.</span>
         </div>
       </div>
 
@@ -194,6 +205,8 @@ export default {
         high: Number(root.querySelector('#s-bfhigh').value) || 0,
         severe: Number(root.querySelector('#s-bfsev').value) || 0
       };
+      s.wtdWeeklyHours = Number(root.querySelector('#s-wtd').value) || 48;
+      s.notifications = root.querySelector('#s-notify').checked;
       await ctx.persist('settings');
       ctx.toast('Settings saved');
       ctx.rerender();
@@ -223,6 +236,16 @@ export default {
       state.ui.syncReady = false;
       ctx.toast('Sync disconnected — this machine is standalone again');
       ctx.rerender();
+    };
+
+    root.querySelector('#s-timesheet').onclick = async () => {
+      const from = root.querySelector('#s-tsfrom').value;
+      const to = root.querySelector('#s-tsto').value;
+      if (!from || !to || to < from) { ctx.toast('Check the dates'); return; }
+      const csv = timesheetCSV({ startDate: from, endDate: to, staff: state.staff, entries: state.entries, leaveList: state.leave });
+      download(`timesheet-${from}-to-${to}.csv`, csv, 'text/csv');
+      await ctx.log(`Exported timesheet CSV ${from} – ${to}`);
+      ctx.toast('Timesheet exported');
     };
 
     root.querySelector('#s-evidence').onclick = async () => {

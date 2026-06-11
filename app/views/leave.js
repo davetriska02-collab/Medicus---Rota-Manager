@@ -6,7 +6,7 @@ import { esc } from '../../shared/esc.js';
 import { LEAVE_TYPES, leaveTypeById } from '../../shared/model.js';
 import { uid } from '../../shared/store.js';
 import { todayISO, fmtRange } from '../../shared/time.js';
-import { leaveBalance, checkLeaveRequest, applyApprovedLeave, sfeReimbursementFlags, fitNoteFlags } from '../../engine/leave.js';
+import { leaveBalance, checkLeaveRequest, applyApprovedLeave, sfeReimbursementFlags, fitNoteFlags, toilBalance } from '../../engine/leave.js';
 import { bradfordRows } from '../../engine/bradford.js';
 import { addDays } from '../../shared/time.js';
 import { staffSorted, warnHTML } from './ui.js';
@@ -83,14 +83,16 @@ export default {
       <div class="card">
         <h2 class="mt0">Balances (sessions, this leave year)</h2>
         <table>
-          <thead><tr><th>Staff</th><th>Annual</th><th>Used</th><th>Remaining</th><th>Study</th><th>Used</th><th>Remaining</th></tr></thead>
+          <thead><tr><th>Staff</th><th>Annual</th><th>Used</th><th>Remaining</th><th>Study</th><th>Used</th><th>Remaining</th><th>TOIL left</th></tr></thead>
           <tbody>
             ${people.map((p) => {
               const al = leaveBalance(p, state.leave, 'annual', todayISO());
               const sl = leaveBalance(p, state.leave, 'study', todayISO());
+              const tb = toilBalance(p, state.leave);
               return `<tr><td>${esc(p.name)}</td>
                 <td>${al.entitled}</td><td>${al.used}</td><td class="${al.remaining < 0 ? 'right' : ''}" style="${al.remaining < 0 ? 'color:var(--high);font-weight:700' : ''}">${al.remaining}</td>
-                <td>${sl.entitled}</td><td>${sl.used}</td><td style="${sl.remaining < 0 ? 'color:var(--high);font-weight:700' : ''}">${sl.remaining}</td></tr>`;
+                <td>${sl.entitled}</td><td>${sl.used}</td><td style="${sl.remaining < 0 ? 'color:var(--high);font-weight:700' : ''}">${sl.remaining}</td>
+                <td style="${tb.remaining < 0 ? 'color:var(--high);font-weight:700' : ''}">${tb.remaining}</td></tr>`;
             }).join('')}
           </tbody>
         </table>

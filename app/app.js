@@ -6,6 +6,7 @@
 import { loadAll, save } from '../shared/store.js';
 import { mondayOf, todayISO } from '../shared/time.js';
 import * as sync from '../shared/sync.js';
+import { notify } from '../shared/notify.js';
 import dashboard from './views/dashboard.js';
 import me from './views/me.js';
 import rota from './views/rota.js';
@@ -76,12 +77,24 @@ function render() {
 }
 
 async function applyRemote(remote) {
+  const pendingBefore =
+    state.leave.filter((l) => l.status === 'requested').length +
+    state.swaps.filter((s) => s.status === 'requested').length;
   for (const key of SYNC_SCOPES) {
     if (key in (remote.scopes || {})) await save(key, remote.scopes[key]);
   }
   Object.assign(state, await loadAll());
   render();
   toast(`Synced from shared folder (v${remote.version}${remote.updatedBy ? `, ${remote.updatedBy}` : ''})`);
+  if (state.settings.notifications) {
+    notify('Rota updated', `Shared rota v${remote.version}${remote.updatedBy ? ` by ${remote.updatedBy}` : ''}`);
+    const pendingAfter =
+      state.leave.filter((l) => l.status === 'requested').length +
+      state.swaps.filter((s) => s.status === 'requested').length;
+    if (state.settings.userRole !== 'staff' && pendingAfter > pendingBefore) {
+      notify('Approvals waiting', `${pendingAfter} leave/swap request(s) need a decision`);
+    }
+  }
 }
 
 async function pollRemote() {

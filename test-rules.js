@@ -163,4 +163,27 @@ w = checkWeek({
 assert.equal(w.filter((x) => x.kind === 'enhanced' && x.period === 'eve').length, 1);
 assert.equal(w.filter((x) => x.kind === 'duty').length, 0);
 
+// WTD: a salaried GP rostered 12 core sessions (50h) gets the over-cap
+// warning; a partner with the same load does not (self-employed).
+const heavy = newStaff({ id: 'hv', name: 'Dr Heavy', employmentType: 'salaried' });
+const heavyPartner = newStaff({ id: 'hp', name: 'Dr Partner Heavy', employmentType: 'partner' });
+const heavyEntries = [];
+for (const d of ['2026-06-08', '2026-06-09', '2026-06-10', '2026-06-11', '2026-06-12', '2026-06-13']) {
+  for (const period of ['am', 'pm']) {
+    heavyEntries.push(e('hv', d, period, 'surgery'));
+    heavyEntries.push(e('hp', d, period, 'surgery'));
+  }
+}
+w = checkWeek({ dates, entries: heavyEntries, staff: [heavy, heavyPartner], leaveList: [], settings: { ...settings, dutyRequired: { am: 0, pm: 0 } } });
+const wtd = w.filter((x) => x.kind === 'wtd');
+assert.equal(wtd.length, 1);
+assert.equal(wtd[0].staffId, 'hv');
+assert.ok(/50\.0h/.test(wtd[0].message));
+
+// Seven days rostered -> no-rest-day warning even under the hours cap.
+const sevenDays = ['2026-06-08', '2026-06-09', '2026-06-10', '2026-06-11', '2026-06-12', '2026-06-13', '2026-06-14']
+  .map((d) => e('hv', d, 'am', 'surgery'));
+w = checkWeek({ dates, entries: sevenDays, staff: [heavy], leaveList: [], settings: { ...settings, dutyRequired: { am: 0, pm: 0 } } });
+assert.ok(w.some((x) => x.kind === 'wtd' && /seven days/.test(x.message)));
+
 console.log('test-rules: OK');
