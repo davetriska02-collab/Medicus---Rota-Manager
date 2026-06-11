@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.9.1 — 2026-06-11
+
+- Fix: the rota Actions menu rendered beneath the grid — the entrance animation makes
+  top-level blocks stacking contexts, trapping the panel's z-index; the toolbar now lifts
+  above siblings while its menu is open.
+- Pattern inference UX: applying a proposal now marks it "applied ✓" in the list (with
+  re-apply available), and a new **Apply all** button applies every outstanding proposal in
+  one click — no more clicking through fifteen clinicians wondering if anything happened.
+
 ## 1.9.0 — 2026-06-11
 
 The Atelier pass: a commercial-grade UI refinement (design direction in docs/design/).

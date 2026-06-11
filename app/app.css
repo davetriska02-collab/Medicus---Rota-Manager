@@ -93,6 +93,10 @@ details.card[open] > summary::after { content: ' ‹'; }
 .kpi-unit { font-size: 14px; font-weight: 400; color: var(--muted); }
 .sub { color: var(--muted); font-size: 12px; }
 .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; position: relative; }
+/* The entrance animation makes top-level blocks stacking contexts, which
+   traps the actions panel's z-index beneath later siblings (the rota grid):
+   lift the whole toolbar above them while its menu is open. */
+.toolbar:has(details.actions[open]) { z-index: 60; }
 .toolbar .spacer { flex: 1; }
 .weeklabel { font-weight: 800; font-size: 14px; padding: 0 6px; }
 

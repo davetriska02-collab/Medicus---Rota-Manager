@@ -47,6 +47,9 @@ export default {
         <div class="toolbar">
           <button id="infer-live" class="primary" ${isValidPracticeCode(state.settings.practiceCode) ? '' : 'disabled title="Set your practice code in Settings"'}>Infer from Medicus (4 weeks)</button>
           <button id="infer-demo">Infer from sample data</button>
+          ${((state.ui.inferResult || {}).proposals || []).some((p) => !p.applied)
+            ? `<button id="infer-applyall" class="primary">Apply all (${((state.ui.inferResult || {}).proposals || []).filter((p) => !p.applied).length})</button>`
+            : ''}
         </div>
         <div id="infer-out">
           ${state.ui.inferResult ? renderInference(state.ui.inferResult) : ''}
@@ -103,7 +106,9 @@ function renderInference(result) {
         <strong>${esc(p.name)}</strong>
         <span class="sub">${esc(p.summary.join(', '))}</span>
         <span class="spacer"></span>
-        <button class="small primary" data-applypattern="${esc(p.staffId)}">Apply pattern (${p.cells} sessions/wk)</button>
+        ${p.applied
+          ? `<span class="pill approved">applied ✓</span> <button class="small" data-applypattern="${esc(p.staffId)}">Re-apply</button>`
+          : `<button class="small primary" data-applypattern="${esc(p.staffId)}">Apply pattern (${p.cells} sessions/wk)</button>`}
       </div>`).join('') : '<div class="muted">No regular patterns detected for your registered staff.</div>'}
     ${result.unmatched.length ? `<div class="sub" style="margin-top:6px">Consulting in Medicus but not in the staff registry: ${result.unmatched.map(esc).join(', ')} — import them via Live sync first.</div>` : ''}
   `;
@@ -143,10 +148,11 @@ function wireInference(root, ctx) {
 
   root.querySelectorAll('[data-applypattern]').forEach((btn) => {
     btn.onclick = async () => {
-      const proposal = (state.ui.inferResult || {}).proposals.find((p) => p.staffId === btn.dataset.applypattern);
+      const proposal = ((state.ui.inferResult || {}).proposals || []).find((p) => p.staffId === btn.dataset.applypattern);
       const person = state.staff.find((s) => s.id === btn.dataset.applypattern);
       if (!proposal || !person) return;
       person.pattern = proposal.pattern;
+      proposal.applied = true;
       await ctx.persist('staff');
       await ctx.log(`Applied inferred pattern to ${person.name} (${proposal.cells} sessions/wk)`);
       ctx.toast(`Pattern applied to ${person.name} — review it above, then generate the rota`);
@@ -154,6 +160,24 @@ function wireInference(root, ctx) {
       ctx.rerender();
     };
   });
+
+  const applyAll = root.querySelector('#infer-applyall');
+  if (applyAll) applyAll.onclick = async () => {
+    const proposals = ((state.ui.inferResult || {}).proposals || []).filter((p) => !p.applied);
+    let applied = 0;
+    for (const proposal of proposals) {
+      const person = state.staff.find((s) => s.id === proposal.staffId);
+      if (!person) continue;
+      person.pattern = proposal.pattern;
+      proposal.applied = true;
+      applied += 1;
+    }
+    if (!applied) return;
+    await ctx.persist('staff');
+    await ctx.log(`Applied ${applied} inferred week pattern(s)`);
+    ctx.toast(`${applied} pattern(s) applied — generate the rota when ready`);
+    ctx.rerender();
+  };
 }
 
 function pattern(person, settings) {
