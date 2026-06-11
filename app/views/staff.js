@@ -24,7 +24,7 @@ export default {
         <tbody>
           ${staffSorted(state.staff).map((p) => `
             <tr class="clickable" data-id="${esc(p.id)}">
-              <td><span class="dot" style="background:${esc(p.colour)}"></span>${esc(p.name)}</td>
+              <td><span class="dot" style="background:${esc(p.colour)}"></span>${esc(p.name)}${p.notAPerson ? ' <span class="pill cancelled" title="Directory lane — excluded from rota, inference and reconciliation">lane</span>' : ''}</td>
               <td>${esc((roleById(p.role) || {}).name || p.role)}</td>
               <td>${esc((EMPLOYMENT_TYPES.find((t) => t.id === p.employmentType) || {}).name || p.employmentType)}${p.registrarStage ? ` (${esc(p.registrarStage)})` : ''}</td>
               <td>${esc(String(p.contractedSessions))}</td>
@@ -36,7 +36,7 @@ export default {
           ${state.staff.length ? '' : `<tr><td colspan="7"><div class="empty-state"><h3>No staff yet</h3><p>Add people here, import clinicians from Medicus via Live sync, or load demo data from Settings.</p></div></td></tr>`}
         </tbody>
       </table>
-      ${editing ? form(editing, editingId === 'new', state.settings.sites || [], state.rooms || []) : ''}
+      ${editing ? `<div class="modal-backdrop" id="staff-modal"><div class="modal">${form(editing, editingId === 'new', state.settings.sites || [], state.rooms || [])}</div></div>` : ''}
     `;
 
     root.querySelector('#add').onclick = () => {
@@ -62,6 +62,15 @@ export default {
 
     const f = root.querySelector('#staffform');
     if (!f) return;
+
+    // Click on the dimmed backdrop (not the form) closes without saving.
+    const modal = root.querySelector('#staff-modal');
+    modal.addEventListener('mousedown', (ev) => {
+      if (ev.target !== modal) return;
+      state.ui.staffEditing = null;
+      state.ui.staffDraft = null;
+      ctx.rerender();
+    });
     const val = (id) => f.querySelector(`#${id}`);
 
     f.querySelector('#save').onclick = async () => {
@@ -75,6 +84,7 @@ export default {
       person.dutyEligible = val('f-duty').checked;
       person.supervisor = val('f-super').checked;
       person.prescriber = val('f-rx').checked;
+      person.notAPerson = val('f-notperson').checked;
       person.entitlement = { annual: Number(val('f-al').value) || 0, study: Number(val('f-sl').value) || 0 };
       person.toilAccrued = Number(val('f-toil').value) || 0;
       person.medicusName = val('f-medicus').value.trim();
@@ -167,6 +177,7 @@ function form(p, isNew, sites, rooms) {
         <label class="check"><input id="f-duty" type="checkbox" ${p.dutyEligible ? 'checked' : ''}>Duty-doctor eligible</label>
         <label class="check"><input id="f-super" type="checkbox" ${p.supervisor ? 'checked' : ''}>Registrar supervisor</label>
         <label class="check"><input id="f-rx" type="checkbox" ${p.prescriber ? 'checked' : ''}>Prescriber</label>
+        <label class="check"><input id="f-notperson" type="checkbox" ${p.notAPerson ? 'checked' : ''}>Not a person (111/directory lane — keep matched, exclude from rota &amp; inference)</label>
       </div>
       <div class="toolbar">
         <button id="save" class="primary">Save</button>

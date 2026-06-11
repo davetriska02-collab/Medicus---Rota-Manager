@@ -19,6 +19,7 @@ export function rankCover({ vacancy, staff, entries, leaveList }) {
 
   for (const c of staff) {
     if (c.id === vacancy.staffId) continue;
+    if (c.notAPerson) continue;
     if (((roleById(c.role) || {}).group) !== group) continue;
     if (vacancy.typeId === 'duty' && !(c.dutyEligible && c.role === 'gp')) continue;
     if (approvedLeaveFor(leaveList, c.id, vacancy.date)) continue;

@@ -1,6 +1,6 @@
 {
   "name": "medicus-rota-manager",
-  "version": "1.9.1",
+  "version": "1.10.0",
   "private": true,
   "type": "module",
   "description": "Rota manager for general practice built around the Medicus EHR.",

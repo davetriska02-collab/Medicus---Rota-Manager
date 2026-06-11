@@ -127,7 +127,7 @@ export default {
         <div class="card">
           <h2 class="mt0">Same-day sickness</h2>
           <div class="toolbar mb8">
-            <select id="sickwho">${staffSorted(state.staff).map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>
+            <select id="sickwho">${staffSorted(state.staff.filter((p) => !p.notAPerson)).map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>
             <button id="sickgo" class="danger">Mark sick today</button>
             <span class="sub">Approves a sickness episode for today, punches out their sessions and lines up cover options below.</span>
           </div>

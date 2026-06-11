@@ -17,13 +17,15 @@ function needsRoom(cell) {
 
 // rowsByDate: { 'YYYY-MM-DD': parseOverview(payload) }
 export function inferRooms({ rowsByDate, staff }) {
+  // Directory lanes (NHS 111 etc.) never occupy a physical room.
+  const lanes = new Set(staff.filter((s) => s.notAPerson).flatMap((s) => [norm(s.medicusName), norm(s.name)]).filter(Boolean));
   const byName = {}; // norm name -> { name, sessions, slots: Set('date|period') }
   const slotOccupants = {}; // 'date|period' -> [norm names]
 
   for (const [date, rows] of Object.entries(rowsByDate)) {
     for (const row of rows) {
       const key = norm(row.name);
-      if (!key) continue;
+      if (!key || lanes.has(key)) continue;
       for (const period of ['am', 'pm']) {
         if (!needsRoom(row[period])) continue;
         const rec = (byName[key] ||= { name: row.name, sessions: 0, slots: new Set() });

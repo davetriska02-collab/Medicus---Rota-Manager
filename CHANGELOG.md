@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.10.0 — 2026-06-11
+
+- **"Not a person" flag** for directory lanes (NHS 111, triage lists) that appear as
+  clinicians in the appointment book. Tick it on the staff record and the lane stays in the
+  registry — so it keeps matching and never resurfaces as "unknown clinician" — but is
+  excluded from the rota grid, pattern inference, room inference (no room, no concurrency),
+  reconciliation (no ghost/unplanned clinics), cover suggestions and every people picker
+  (leave, sickness, swaps, identity). Marked with a "lane" badge in the staff list.
+- The staff editor now opens as a **modal over the list** instead of rendering below a
+  30-row table where the click looked dead. Backdrop click or Cancel closes it.
+
 ## 1.9.1 — 2026-06-11
 
 - Fix: the rota Actions menu rendered beneath the grid — the entrance animation makes

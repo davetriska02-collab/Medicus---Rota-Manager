@@ -30,6 +30,15 @@ assert.deepEqual(result.unmatched, ['Dr Eve']); // consulting F2F but unregister
 const unbooked = inferRooms({ rowsByDate: { '2026-06-01': [row('Dr Alice', cell(true, 0, 0), off)] }, staff: [alice] });
 assert.equal(unbooked.roomCount, 1);
 
+// Directory lanes (notAPerson) never occupy a room or an assignment.
+const bobLane = newStaff({ id: 'b2', name: 'Dr Bob', notAPerson: true });
+const laneResult = inferRooms({
+  rowsByDate: { '2026-06-01': [row('Dr Alice', cell(true, 2, 2), off), row('Dr Bob', cell(true, 2, 2), off)] },
+  staff: [alice, bobLane]
+});
+assert.equal(laneResult.roomCount, 1); // only Alice needs a room
+assert.ok(!laneResult.assignments.some((a) => a.staffId === 'b2'));
+
 // Booked but zero F2F (all remote/telephone) needs no room.
 const remote = inferRooms({ rowsByDate: { '2026-06-01': [row('Dr Alice', cell(true, 5, 0), off)] }, staff: [alice] });
 assert.equal(remote.roomCount, 0);

@@ -326,6 +326,22 @@ details.actions .actions-panel .actions-row {
 .pill.bf-high { background: rgba(251, 146, 60, .16); color: #fdba74; box-shadow: inset 0 0 0 1px rgba(251, 146, 60, .35); }
 .pill.bf-severe { background: rgba(248, 113, 113, .16); color: #fca5a5; box-shadow: inset 0 0 0 1px rgba(248, 113, 113, .4); }
 
+/* ---- modal ---- */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 80;
+  background: rgba(4, 7, 18, .6);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 6vh 16px; overflow-y: auto;
+  animation: popIn .16s cubic-bezier(.2, .7, .3, 1) both;
+}
+.modal { width: min(880px, 100%); }
+.modal .card {
+  background: rgba(15, 21, 45, .94); margin-bottom: 0;
+  border-top: 1px solid rgba(255, 255, 255, .18);
+  max-height: 86vh; overflow-y: auto;
+}
+
 #toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
   background: rgba(15, 21, 45, .85);

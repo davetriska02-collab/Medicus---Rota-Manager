@@ -90,6 +90,7 @@ export function newStaff(seed = {}) {
     toilAccrued: 0, // sessions of TOIL banked (manually adjusted; spent via 'toil' leave)
     pattern: blankPattern(1),
     medicusName: '', // exact name as it appears in the Medicus appointment book
+    notAPerson: false, // directory lanes (NHS 111, triage lists) — kept in the registry so they match, excluded from rota, inference, reconciliation and cover
     site: '', // optional, one of settings.sites
     usualRoomId: null, // preferred consulting room (inferable from Medicus concurrency)
     vtsDay: '', // registrars: immovable VTS half-day, e.g. 'tue-pm'

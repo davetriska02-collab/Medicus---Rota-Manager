@@ -41,4 +41,12 @@ assert.equal(single.proposals.length, 0);
 const loose = inferPatterns({ rowsByDate, staff: [alice], threshold: 0.25 });
 assert.equal(loose.proposals[0].pattern[0].tue.am, 'surgery');
 
+// Directory lanes (notAPerson): matched so they never show as unknown,
+// but no pattern is ever proposed for them.
+const lane = newStaff({ id: 'lane', name: 'Nhs 111', medicusName: 'Dr Ghost', notAPerson: true });
+const flagged = inferPatterns({ rowsByDate, staff: [alice, lane] });
+assert.equal(flagged.proposals.length, 1); // Alice only
+assert.equal(flagged.proposals[0].staffId, 'a1');
+assert.deepEqual(flagged.unmatched, []); // the lane no longer reported as unmatched
+
 console.log('test-infer: OK');

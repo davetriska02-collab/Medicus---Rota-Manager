@@ -28,7 +28,7 @@ export default {
           <h2 class="mt0">Who are you?</h2>
           <p class="sub">Pick yourself once on this machine — your sessions, balances and swap requests live here.</p>
           <div class="toolbar">
-            <select id="whoami">${staffSorted(state.staff).map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>
+            <select id="whoami">${staffSorted(state.staff.filter((p) => !p.notAPerson)).map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>
             <button id="saveme" class="primary" ${state.staff.length ? '' : 'disabled'}>That's me</button>
           </div>
           ${state.staff.length ? '' : '<div class="muted">No staff yet — set the practice up first (Staff page or demo data in Settings).</div>'}
@@ -53,7 +53,7 @@ export default {
     const mySwaps = state.swaps.filter((s) => s.proposedBy === meStaff.id).slice(-10).reverse();
     const myLeave = state.leave.filter((l) => l.staffId === meStaff.id).slice(-8).reverse();
 
-    const colleagues = staffSorted(state.staff.filter((p) => p.id !== meStaff.id));
+    const colleagues = staffSorted(state.staff.filter((p) => p.id !== meStaff.id && !p.notAPerson));
     const swappable = (staffId) => state.entries
       .filter((e) => e.staffId === staffId && e.date >= today && e.date <= addDays(today, 27) && ACTIVE.includes(e.status))
       .sort((a, b) => `${a.date}${a.period}`.localeCompare(`${b.date}${b.period}`));

@@ -29,6 +29,11 @@ assert.ok(/unrostered/.test(ranked[0].reason));
 assert.ok(/extra session/.test(ranked[1].reason));
 assert.equal(ranked[2].isLocum, true);
 
+// Directory lanes are never cover candidates.
+const lane = newStaff({ id: 'lane', name: 'Nhs 111', notAPerson: true, contractedSessions: 10 });
+const laneRanked = rankCover({ vacancy, staff: [sick, lane], entries, leaveList: [] });
+assert.equal(laneRanked.length, 0);
+
 // Duty vacancies only rank duty-eligible GPs.
 const dutyVacancy = { ...vacancy, typeId: 'duty' };
 const noDuty = newStaff({ id: 'nd', name: 'Dr NoDuty', dutyEligible: false });

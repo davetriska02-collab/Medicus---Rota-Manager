@@ -156,7 +156,7 @@ export default {
     );
     const sites = (s.sites || []).filter(Boolean);
     const siteFilter = state.ui.siteFilter || '';
-    const people = staffSorted(state.staff).filter((p) => !siteFilter || (p.site || sites[0]) === siteFilter);
+    const people = staffSorted(state.staff).filter((p) => !p.notAPerson && (!siteFilter || (p.site || sites[0]) === siteFilter));
 
     const warnings = checkWeek({ dates, entries: state.entries, staff: state.staff, leaveList: state.leave, settings: s, rooms });
     const cap = capacitySummary({ dates, entries: state.entries, staff: state.staff, leaveList: state.leave, settings: s });

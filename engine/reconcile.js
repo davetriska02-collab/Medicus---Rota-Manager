@@ -66,7 +66,7 @@ export function diffDay({ date, medicusRows, rotaEntries, staff, leaveList }) {
     const t = typeById(e.typeId);
     if (!t || !t.buildsClinic) continue;
     const person = staff.find((s) => s.id === e.staffId);
-    if (!person) continue;
+    if (!person || person.notAPerson) continue;
     if (approvedLeaveFor(leaveList, person.id, date)) continue; // handled by ghost pass
     const row = medicusRows.find((r) => matchStaff([person], r.name));
     if (!row || !row[e.period].hasSession) {
@@ -87,6 +87,7 @@ export function diffDay({ date, medicusRows, rotaEntries, staff, leaveList }) {
   for (const row of medicusRows) {
     const person = matchStaff(staff, row.name);
     if (person) matchedNames.add(norm(row.name));
+    if (person && person.notAPerson) continue; // directory lane: never a ghost or unplanned clinic
     for (const period of ['am', 'pm']) {
       if (!row[period].hasSession) continue;
       if (!person) continue; // reported once below as unknown-clinician

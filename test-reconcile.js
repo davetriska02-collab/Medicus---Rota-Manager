@@ -75,6 +75,16 @@ findings = diffDay({
 assert.equal(findings.filter((f) => f.kind === 'missing-clinic').length, 0);
 assert.equal(findings.filter((f) => f.kind === 'unknown-clinician').length, 0);
 
+// Directory lanes (notAPerson): clinics in Medicus for a flagged record
+// raise nothing — no unplanned, no ghost, no unknown.
+const lane = newStaff({ id: 'lane1', name: 'Nhs 111', medicusName: 'Dr Alice Smith', notAPerson: true });
+findings = diffDay({
+  date: '2026-06-10', medicusRows: rows, staff: [lane],
+  leaveList: [{ staffId: 'lane1', status: 'approved', type: 'annual', startDate: '2026-06-10', endDate: '2026-06-10' }],
+  rotaEntries: []
+});
+assert.equal(findings.length, 0);
+
 // --- demo fixture round-trip: the synthetic payload must parse and diff ---
 const demo = demoData();
 const demoRows = parseOverview(demoOverviewPayload(demo.staff, '2026-06-10'));

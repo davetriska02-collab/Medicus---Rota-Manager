@@ -34,6 +34,7 @@ export function inferPatterns({ rowsByDate, staff, threshold = 0.6, defaultType 
     const rec = byName[norm(person.medicusName)] || byName[norm(person.name)];
     if (!rec) continue;
     matched.add(norm(rec.name));
+    if (person.notAPerson) continue; // directory lane: matched (so not "unknown"), never proposed
     const pattern = blankPattern(1);
     let cells = 0;
     const summary = [];

@@ -14,7 +14,7 @@ import { staffSorted, warnHTML } from './ui.js';
 export default {
   render(root, ctx) {
     const { state } = ctx;
-    const people = staffSorted(state.staff);
+    const people = staffSorted(state.staff.filter((p) => !p.notAPerson));
     const sfe = sfeReimbursementFlags(state.leave, state.staff);
     const fitFlags = fitNoteFlags(state.leave, state.staff);
     const recentSick = state.leave
