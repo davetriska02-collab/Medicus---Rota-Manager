@@ -1,5 +1,14 @@
 # Medicus Rota Manager
 
+> [!IMPORTANT]
+> **This repository is deprecated.** As of August 2026 the Rota Manager has been subsumed into
+> the [Medicus Suite](https://github.com/davetriska02-collab/medicus-suite), which is now the
+> canonical home: the full rota application opens as a tab from the Suite's side panel, a
+> compact rota status module lives in the panel itself, and `rota.*` data is covered by the
+> Suite's backup envelope. No further feature work will land here; the history remains intact
+> for reference. Existing standalone installs keep working, but new installs and all future
+> development happen in the Suite.
+
 A rota manager built **for general practice** and **around the Medicus EHR**. It is a Chrome (MV3)
 extension — the same proven, read-only architecture as the Medicus Suite — whose whole reason to
 exist is the one thing no rota product on the market does: **reconciling the planned rota against

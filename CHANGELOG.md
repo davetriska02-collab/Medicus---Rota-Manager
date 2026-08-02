@@ -1,5 +1,14 @@
 # Changelog
 
+## Deprecated — 2026-08-02
+
+This repository is deprecated. The Rota Manager (at v1.10.0) has been subsumed into the
+[Medicus Suite](https://github.com/davetriska02-collab/medicus-suite) as a `rota/` subtree:
+the full app opens as a tab from the Suite side panel, a compact rota status module lives in
+the panel, and all `rota.*` storage keys are covered by the Suite backup envelope. A final
+Gauntlet benchmark refresh (docs/benchmark/GAUNTLET-2026-08-02.md) recorded the product's
+competitive position at the point of subsumption. No further feature work lands here.
+
 ## 1.10.0 — 2026-06-11
 
 - **"Not a person" flag** for directory lanes (NHS 111, triage lists) that appear as
